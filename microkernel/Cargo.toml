@@ -1,0 +1,12 @@
+[package]
+name = "microkernel"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+allocator = { git = "https://github.com/Byte-OS/allocator.git", rev = "c6ce94"}
+buddy_system_allocator = "0.9.1"
+executor = { git = "https://github.com/Byte-OS/executor.git" }
+polyhal = { git = "https://github.com/Byte-OS/polyhal.git", features = ["kcontext"]}
+log = "0.4"
+spin = { version = "0.9.8", features = ["mutex"] }
