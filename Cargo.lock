@@ -201,6 +201,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "num_enum"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02339744ee7253741199f897151b38e72257d13802d4ee837285cc2990a90845"
+dependencies = [
+ "num_enum_derive",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "681030a937600a36906c185595136d26abfebb4aa9c65701cefcaf8578bb982b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -378,6 +398,13 @@ version = "0.1.0"
 source = "git+https://github.com/Byte-OS/sync.git#8c5f094d85cd7f4574bb6035c87d94dc5dee3998"
 dependencies = [
  "spin",
+]
+
+[[package]]
+name = "syscall_consts"
+version = "0.1.0"
+dependencies = [
+ "num_enum",
 ]
 
 [[package]]

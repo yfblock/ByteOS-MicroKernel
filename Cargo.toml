@@ -1,5 +1,6 @@
+[patch]
+
 [workspace]
+members = [ "crates/syscall_consts", "microkernel" ]
 resolver = "2"
-members = [
-    "microkernel"
-]
+exclude = ["users"]

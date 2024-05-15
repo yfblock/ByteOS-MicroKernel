@@ -9,6 +9,7 @@ NVME := off
 NET  := off
 LOG  := error
 RELEASE := release
+SMP := 1
 QEMU_EXEC ?= 
 GDB  ?= gdb-multiarch
 ARCH := $(call byteos_triple,arch)
@@ -44,7 +45,7 @@ FS_IMG  := mount.img
 features:= 
 QEMU_EXEC += -m 1G\
 			-nographic \
-			-smp 1 \
+			-smp $(SMP) \
 			-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors
 
 TESTCASE := testcase-$(ARCH)
@@ -63,6 +64,9 @@ endif
 all: build
 
 fs-img:
+
+env:
+	rustup component add llvm-tools-preview
 
 build:
 	kbuild build microkernel.yaml $(BIN)

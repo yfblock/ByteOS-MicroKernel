@@ -61,6 +61,7 @@ SECTIONS
         *(.sbss .sbss.*)
         _ebss = .;
     }
+    . = ALIGN(4K);
 
     PROVIDE(end = .);
     /DISCARD/ : {

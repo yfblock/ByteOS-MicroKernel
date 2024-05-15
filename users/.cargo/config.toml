@@ -1,0 +1,4 @@
+[target.riscv64gc-unknown-none-elf]
+rustflags = [
+    "-Clink-args=-Tlinker/linker-riscv64.ld", "-Cforce-frame-pointers=yes"
+]

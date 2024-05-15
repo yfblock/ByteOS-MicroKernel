@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "users"
+		}
+	],
+	"settings": {
+		"rust-analyzer.check.allTargets": false,
+	}
+}

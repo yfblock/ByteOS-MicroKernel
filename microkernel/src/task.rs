@@ -1,5 +1,5 @@
-use alloc::{collections::VecDeque, string::String, vec::Vec};
-use executor::{task::TaskType, AsyncTask, TaskId};
+use alloc::{collections::VecDeque, string::String, sync::Arc, vec::Vec};
+use executor::{task::TaskType, thread::spawn_blank, AsyncTask, TaskId};
 use polyhal::{pagetable::PageTableWrapper, TrapFrame};
 
 use crate::frame::FrameTracker;
@@ -11,6 +11,8 @@ pub struct Task {
     trap_frame: TrapFrame,
     /// 任务页表
     page_table: PageTableWrapper,
+    /// 页表代理任务
+    pager: Option<Arc<Task>>,
     /// 任务 ID
     tid: TaskId,
     /// 任务名称
@@ -55,3 +57,10 @@ impl AsyncTask for Task {
 }
 
 pub struct Message {}
+
+pub fn add_root_service() {
+    spawn_blank(async move {
+        log::info!("Async Task Start");
+        loop {}
+    });
+}

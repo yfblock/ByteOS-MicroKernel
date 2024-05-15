@@ -1,7 +1,7 @@
 use core::fmt::Write;
 use core::panic::PanicInfo;
 use log::{Level, LevelFilter, Log};
-use polyhal::{addr::PhysPage, debug::DebugConsole, PageAlloc};
+use polyhal::{addr::PhysPage, debug::DebugConsole, hart_id, PageAlloc};
 use spin::Mutex;
 
 use crate::frame;
@@ -89,6 +89,21 @@ impl PageAlloc for PageAlloImpl {
 }
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    if let Some(location) = info.location() {
+        println!(
+            "\x1b[1;31m[Core {}] [{}:{}]\x1b[0m",
+            hart_id(),
+            location.file(),
+            location.line(),
+        );
+    }
+    println!(
+        "\x1b[1;31m[Core {}] panic: '{}'\x1b[0m",
+        hart_id(),
+        info.message().unwrap()
+    );
+    // backtrace();
+    println!("!TEST FINISH!");
     polyhal::shutdown();
 }
