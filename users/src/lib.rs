@@ -12,13 +12,14 @@ use syscall::exit;
 
 #[link_section = ".text.entry"]
 #[no_mangle]
-fn _start() {
+fn _start() -> ! {
     extern "Rust" {
         fn main();
     }
     unsafe {
         main();
     }
+    exit();
 }
 
 #[panic_handler]

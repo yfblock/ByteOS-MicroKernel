@@ -10,3 +10,5 @@ executor = { git = "https://github.com/Byte-OS/executor.git" }
 polyhal = { git = "https://github.com/Byte-OS/polyhal.git", features = ["kcontext", "multicore"]}
 log = "0.4"
 spin = { version = "0.9.8", features = ["mutex"] }
+syscall_consts = { path = "../crates/syscall_consts" }
+xmas-elf = "0.9.0"

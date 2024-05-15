@@ -69,7 +69,7 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
 }
 
 pub fn serial_write(buf: &[u8]) -> usize {
-    syscall(SysCall::SerialWrite.into(), [buf.as_ptr() as usize, 0, 0]) as _
+    syscall(SysCall::SerialWrite.into(), [buf.as_ptr() as usize, buf.len(), 0]) as _
 }
 
 pub fn exit() -> ! {

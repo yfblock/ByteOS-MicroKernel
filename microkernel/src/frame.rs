@@ -43,7 +43,7 @@ pub fn frame_dealloc(ppn: PhysPage) {
     LOCK_FRAME_ALLOCATOR.lock().dealloc(ppn.as_num(), 1);
 }
 
-pub struct FrameTracker(PhysPage);
+pub struct FrameTracker(pub PhysPage);
 
 impl Drop for FrameTracker {
     fn drop(&mut self) {

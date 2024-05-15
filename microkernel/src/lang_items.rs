@@ -76,6 +76,10 @@ pub fn print(args: core::fmt::Arguments) {
         .expect("can't write string in logging module.");
 }
 
+pub fn puts(bytes: &[u8]) {
+    bytes.into_iter().for_each(|x| DebugConsole::putchar(*x))
+}
+
 pub(crate) struct PageAlloImpl;
 
 impl PageAlloc for PageAlloImpl {

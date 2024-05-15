@@ -11,14 +11,17 @@ use log::info;
 use polyhal::{get_cpu_num, get_mem_areas, TrapFrame, TrapType, VIRT_ADDR_START};
 use spin::Mutex;
 
+pub mod consts;
 mod frame;
 #[macro_use]
 mod lang_items;
+mod syscall;
 mod task;
+mod utils;
 
 #[polyhal::arch_interrupt]
 fn interrupt_handler(_tf: TrapFrame, trap_type: TrapType) {
-    log::trace!("trap {:#x?}", trap_type);
+    log::debug!("trap {:#x?}", trap_type);
 }
 
 #[polyhal::arch_entry]
@@ -43,9 +46,9 @@ fn main(hart_id: usize) {
         // Initialize the default async executor
         DEFAULT_EXECUTOR.init(get_cpu_num());
 
-        // Add the root service to the async executor
-        info!("Add root service to the async executor");
-        task::add_root_service();
+        // Add the root server to the async executor
+        info!("Add root server to the async executor");
+        task::add_root_server();
 
         // Boot all cores
         polyhal::multicore::MultiCore::boot_all();
