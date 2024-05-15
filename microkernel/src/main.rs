@@ -11,6 +11,7 @@ use log::info;
 use polyhal::{get_cpu_num, get_mem_areas, TrapFrame, TrapType, VIRT_ADDR_START};
 use spin::Mutex;
 
+pub mod async_ops;
 pub mod consts;
 mod frame;
 #[macro_use]

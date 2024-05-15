@@ -5,7 +5,7 @@ use executor::{task::TaskType, task_id_alloc, thread::spawn, AsyncTask, TaskId};
 use log::info;
 use polyhal::{
     addr::{PhysPage, VirtPage},
-    pagetable::{MappingFlags, MappingSize, PageTableWrapper},
+    pagetable::{MappingFlags, MappingSize, PageTable, PageTableWrapper},
     run_user_task, TrapFrame, TrapFrameArgs, PAGE_SIZE, VIRT_ADDR_START,
 };
 use spin::mutex::Mutex;
@@ -166,26 +166,31 @@ pub fn add_root_server() {
     );
     root_server.trap_frame[TrapFrameArgs::SEPC] = elf_header.header.pt2.entry_point() as _;
     root_server.trap_frame[TrapFrameArgs::SP] = USER_STACK_TOP_ADDR;
-    info!("into user");
-    // loop {
-    //     run_user_task(&mut root_server.trap_frame);
-    // }
+
     let root_server = Arc::new(root_server);
     spawn(
         root_server.clone(),
         MicroKernelTask::run(root_server.clone()),
     )
-
-    // spawn_blank(async move {
-    //     log::info!("Async Task Start");
-    //     loop {}
-    // });
 }
 
 impl MicroKernelTask {
+    /// 获取 PageTable
+    pub fn page_table(&self) -> PageTable {
+        self.page_table.0
+    }
+
+    /// 获取 TrapFrame mutable reference
+    pub fn get_trap_frame(&self) -> &mut TrapFrame {
+        unsafe {
+            (&self.trap_frame as *const _ as *mut TrapFrame)
+                .as_mut()
+                .unwrap()
+        }
+    }
+
     pub async fn run(task: Arc<MicroKernelTask>) {
-        let tf =
-            unsafe { (&task.trap_frame as *const TrapFrame as *mut TrapFrame).as_mut() }.unwrap();
+        let tf = task.get_trap_frame();
         loop {
             // 如果任务已经退出了那么，需要退出循环，函数结束后，会由 Rust 回收内存
             if *task.destoryed.lock() == true {

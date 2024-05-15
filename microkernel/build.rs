@@ -17,6 +17,7 @@ fn main() {
     // println!("cargo:rerun-if-env-changed=CARGO_CFG_KERNEL_BASE");
     println!("cargo:rerun-if-env-changed=CARGO_CFG_BOARD");
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=../users/target/riscv64gc-unknown-none-elf/release/vm");
     println!("cargo:rerun-if-changed=linker.lds.S");
 }
 

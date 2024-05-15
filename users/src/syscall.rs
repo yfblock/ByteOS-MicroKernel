@@ -72,6 +72,10 @@ pub fn serial_write(buf: &[u8]) -> usize {
     syscall(SysCall::SerialWrite.into(), [buf.as_ptr() as usize, buf.len(), 0]) as _
 }
 
+pub fn sleep(ms: usize) -> usize {
+    syscall(SysCall::Time.into(), [ms, 0, 0]) as _
+}
+
 pub fn exit() -> ! {
     syscall(SysCall::TaskExit.into(), [0, 0, 0]);
     unreachable!("This task should already exited.")

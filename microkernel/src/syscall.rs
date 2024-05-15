@@ -1,6 +1,6 @@
 use syscall_consts::{SysCall, SysCallError};
 
-use crate::{lang_items::puts, task::MicroKernelTask, utils::UserBuffer};
+use crate::{async_ops::sleep, lang_items::puts, task::MicroKernelTask, utils::UserBuffer};
 
 type SysResult = Result<usize, SysCallError>;
 
@@ -22,6 +22,12 @@ impl MicroKernelTask {
         Ok(0)
     }
 
+    /// 休眠 ms
+    pub async fn sys_time(&self, ms: usize) -> SysResult {
+        sleep(ms).await;
+        Ok(0)
+    }
+
     /// 处理系统调用
     pub async fn syscall(&self, id: usize, args: [usize; 6]) -> Result<usize, SysCallError> {
         match SysCall::from(id) {
@@ -38,7 +44,7 @@ impl MicroKernelTask {
             SysCall::VNUnmap => todo!(),
             SysCall::IrqListen => todo!(),
             SysCall::IrqUnlisten => todo!(),
-            SysCall::Time => todo!(),
+            SysCall::Time => self.sys_time(args[0]).await,
             SysCall::UPTime => todo!(),
             SysCall::HinaVM => todo!(),
             SysCall::Shutdown => todo!(),

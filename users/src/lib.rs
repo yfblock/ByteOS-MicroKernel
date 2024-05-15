@@ -3,12 +3,20 @@
 #![feature(panic_info_message)]
 
 mod console;
-mod syscall;
+pub mod syscall;
 
+use buddy_system_allocator::LockedHeap;
 pub use console::print;
 
 use core::panic::PanicInfo;
 use syscall::exit;
+
+const USER_HEAP_SIZE: usize = 0x2000;
+
+static mut HEAP_SPACE: [u8; USER_HEAP_SIZE] = [0; USER_HEAP_SIZE];
+
+#[global_allocator]
+static HEAP: LockedHeap::<32> = LockedHeap::empty();
 
 #[link_section = ".text.entry"]
 #[no_mangle]
@@ -16,7 +24,9 @@ fn _start() -> ! {
     extern "Rust" {
         fn main();
     }
+
     unsafe {
+        HEAP.lock().init(HEAP_SPACE.as_ptr() as usize, HEAP_SPACE.len());
         main();
     }
     exit();
