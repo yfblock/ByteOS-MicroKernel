@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use users::syscall::sleep;
+use users::syscall::{shutdown, sleep};
 
 #[macro_use]
 extern crate users;
@@ -12,4 +12,5 @@ fn main() {
     println!("Hello World!");
     sleep(5000);
     println!("Sleep End!");
+    shutdown();
 }

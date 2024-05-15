@@ -80,3 +80,8 @@ pub fn exit() -> ! {
     syscall(SysCall::TaskExit.into(), [0, 0, 0]);
     unreachable!("This task should already exited.")
 }
+
+pub fn shutdown() -> ! {
+    syscall(SysCall::Shutdown.into(), [0, 0, 0]);
+    unreachable!("This computor should shutdown.")
+}

@@ -49,7 +49,7 @@ pub struct MicroKernelTask {
     /// 任务是否被删除
     pub destoryed: Mutex<bool>,
     /// 剩余超时时间
-    timeout: usize,
+    pub timeout: Mutex<usize>,
     /// 等待向此 `TASK` 发送消息的任务 ID 队列
     senders: VecDeque<TaskId>,
     /// 可以向此 `TASK` 发送消息的任务 ID
@@ -94,7 +94,7 @@ pub fn add_root_server() {
         name: String::from("VM"),
         state: TaskState::Runable,
         destoryed: Mutex::new(false),
-        timeout: 0,
+        timeout: Mutex::new(0),
         senders: VecDeque::new(),
         wait_for: 0,
         pages: Vec::new(),

@@ -16,6 +16,7 @@ pub mod consts;
 mod frame;
 #[macro_use]
 mod lang_items;
+mod message;
 mod syscall;
 mod task;
 mod utils;

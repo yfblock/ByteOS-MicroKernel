@@ -1,3 +1,4 @@
+use polyhal::{shutdown, time::Time};
 use syscall_consts::{SysCall, SysCallError};
 
 use crate::{async_ops::sleep, lang_items::puts, task::MicroKernelTask, utils::UserBuffer};
@@ -24,8 +25,14 @@ impl MicroKernelTask {
 
     /// 休眠 ms
     pub async fn sys_time(&self, ms: usize) -> SysResult {
-        sleep(ms).await;
+        // sleep(ms).await;
+        *self.timeout.lock() += Time::now().to_nsec() + ms * 0x1000_000;
         Ok(0)
+    }
+
+    /// 关闭计算机
+    pub async fn sys_shutdown(&self) -> ! {
+        shutdown();
     }
 
     /// 处理系统调用
@@ -47,7 +54,7 @@ impl MicroKernelTask {
             SysCall::Time => self.sys_time(args[0]).await,
             SysCall::UPTime => todo!(),
             SysCall::HinaVM => todo!(),
-            SysCall::Shutdown => todo!(),
+            SysCall::Shutdown => self.sys_shutdown().await,
             SysCall::Unknown => todo!(),
         }
     }
