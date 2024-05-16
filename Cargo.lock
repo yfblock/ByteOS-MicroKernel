@@ -406,6 +406,7 @@ dependencies = [
 name = "syscall_consts"
 version = "0.1.0"
 dependencies = [
+ "bitflags 2.5.0",
  "num_enum",
 ]
 

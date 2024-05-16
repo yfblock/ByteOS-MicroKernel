@@ -75,6 +75,13 @@ build:
 run: fs-img build
 	time $(QEMU_EXEC)
 
+user:
+	cd users && make
+
+run-user: fs-img user 
+	make build
+	time $(QEMU_EXEC)
+
 justrun: fs-img
 	rust-objcopy --binary-architecture=$(ARCH) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 	$(QEMU_EXEC)
@@ -91,4 +98,4 @@ clean:
 addr2line:
 	addr2line -sfipe $(KERNEL_ELF) | rustfilt
 
-.PHONY: all run build clean gdb justbuild
+.PHONY: all run build clean gdb justbuild user run-user
