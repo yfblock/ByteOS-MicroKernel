@@ -6,6 +6,8 @@ mod task;
 use syscall_consts::{Message, MessageContent::*, IPC_ANY};
 use users::syscall::{ipc_recv, shutdown, sys_time, sys_uptime, task_self};
 
+use crate::task::spawn_servers;
+
 #[macro_use]
 extern crate users;
 extern crate alloc;
@@ -18,6 +20,8 @@ fn main() {
     sys_time(5000);
     // 输出系统时间
     println!("UPTIME: {}", sys_uptime());
+    // 启动 servers
+    spawn_servers();
     loop {
         let mut message = Message::blank();
         // 等待并接收 IPC 消息
