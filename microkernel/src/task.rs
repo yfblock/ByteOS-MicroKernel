@@ -1,22 +1,28 @@
 use core::arch::global_asm;
 
 use alloc::{string::String, sync::Arc, vec::Vec};
-use executor::{task::TaskType, task_id_alloc, thread::spawn, AsyncTask, TaskId};
+use executor::{
+    current_task, task::TaskType, task_id_alloc, thread::spawn, yield_now, AsyncTask, TaskId,
+};
 use log::info;
 use polyhal::{
-    addr::{PhysPage, VirtPage},
+    addr::{PhysPage, VirtAddr, VirtPage},
     pagetable::{MappingFlags, MappingSize, PageTable, PageTableWrapper},
     run_user_task,
     time::Time,
     TrapFrame, TrapFrameArgs, PAGE_SIZE, VIRT_ADDR_START,
 };
 use spin::mutex::Mutex;
-use syscall_consts::{Message, MessageContent, Notify, NotifyEnum, IPC_ANY};
+use syscall_consts::{
+    ExceptionType, IPCFlags, Message, MessageContent, Notify, NotifyEnum, PMAllocFlags,
+    PageFaultReason, IPC_ANY,
+};
 use xmas_elf::program::Type;
 
 use crate::{
     consts::{USER_STACK_PAGES, USER_STACK_TOP_ADDR},
     frame::{frame_alloc, FrameTracker},
+    utils::align_up,
 };
 
 // 包含 vm elf 文件，vm server 将作为 root server 运行。
@@ -43,15 +49,15 @@ pub enum TaskState {
 
 pub struct MicroKernelTask {
     /// 任务中断上下文
-    trap_frame: TrapFrame,
+    pub trap_frame: TrapFrame,
     /// 任务页表
-    page_table: PageTableWrapper,
+    pub page_table: PageTableWrapper,
     /// 页表代理任务
-    pager: Option<Arc<MicroKernelTask>>,
+    pub pager: Option<Arc<MicroKernelTask>>,
     /// 任务 ID
     pub tid: TaskId,
     /// 任务名称
-    name: String,
+    pub name: String,
     /// 任务状态
     pub state: Mutex<TaskState>,
     /// 任务是否被删除
@@ -65,10 +71,13 @@ pub struct MicroKernelTask {
     /// 可以向此 `TASK` 发送消息的任务 ID
     pub wait_for: Mutex<Option<TaskId>>,
     /// 当前任务拥有的 pages
-    pages: Vec<FrameTracker>,
+    pub pages: Mutex<Vec<FrameTracker>>,
     /// 消息暂存区，因为同时只有一个任务可以向此任务发送消息
     /// 所以可以只需要一个 message 即可，而不需要一个队列
     pub message: Mutex<Option<Message>>,
+    /// 页表错误，由于采用异步形式，但是发生错误的时候需要发送并等待 IPC
+    /// 所以发生错误的时候可以存在在这个结构中，进入 async 函数后处理
+    pub fault: Mutex<Option<(usize, usize, PageFaultReason)>>,
 }
 
 impl AsyncTask for MicroKernelTask {
@@ -118,8 +127,9 @@ pub fn add_root_server() {
         notifications: Mutex::new(Notify::new()),
         senders: Mutex::new(Vec::new()),
         wait_for: Mutex::new(None),
-        pages: Vec::new(),
+        pages: Mutex::new(Vec::new()),
         message: Mutex::new(None),
+        fault: Mutex::new(None),
     };
     // 切换到 ROOT_SERVER 的页表，方便进行内存复制和切换，以及映射新的内存
     root_server.page_table.change();
@@ -158,7 +168,6 @@ pub fn add_root_server() {
 
         // 映射当前内存
         for i in 0..pages {
-            info!("map {:?} -> {:?}", vpn + i, ppn + i);
             root_server.page_table.map_page(
                 vpn + i,
                 ppn + i,
@@ -170,15 +179,19 @@ pub fn add_root_server() {
 
     // 申请新的栈页表, 4KB * 20 = 800KB
     for i in 0..USER_STACK_PAGES {
-        let page = frame_alloc().expect("can't allocate page for root server at boot stage.");
+        let page = frame_alloc(1);
+        assert!(
+            page.len() > 0,
+            "can't allocate page for root server at boot stage."
+        );
         let stack_top = VirtPage::from_addr(USER_STACK_TOP_ADDR - i * PAGE_SIZE);
         root_server.page_table.map_page(
             stack_top,
-            page.0,
+            page[0].0,
             MappingFlags::URWX,
             MappingSize::Page4KB,
         );
-        root_server.pages.push(page);
+        root_server.pages.lock().extend(page);
     }
     info!(
         "Root server entry point: {:#x}",
@@ -195,6 +208,116 @@ pub fn add_root_server() {
 }
 
 impl MicroKernelTask {
+    /// 创建新的任务
+    pub fn new(name: &str, entry_point: usize, pager: Option<Arc<MicroKernelTask>>) -> TaskId {
+        // 申请新的任务 ID
+        let new_tid = task_id_alloc();
+
+        // 创建新的任务
+        let mut new_task = MicroKernelTask {
+            trap_frame: TrapFrame::new(),
+            page_table: PageTableWrapper::alloc(),
+            pager,
+            tid: new_tid,
+            name: String::from(name),
+            state: Mutex::new(TaskState::UnUsed),
+            destoryed: Mutex::new(false),
+            timeout: Mutex::new(0),
+            notifications: Mutex::new(Notify::new()),
+            senders: Mutex::new(Vec::new()),
+            wait_for: Mutex::new(None),
+            pages: Mutex::new(Vec::new()),
+            message: Mutex::new(None),
+            fault: Mutex::new(None),
+        };
+
+        // 设置任务上下文
+        new_task.trap_frame[TrapFrameArgs::SEPC] = entry_point;
+        new_task.trap_frame[TrapFrameArgs::SP] = USER_STACK_TOP_ADDR;
+
+        // 申请新的栈页表, 4KB * 20 = 800KB
+        for i in 0..USER_STACK_PAGES {
+            let page = frame_alloc(1);
+            assert!(
+                page.len() > 0,
+                "can't allocate page for root server at boot stage."
+            );
+            let stack_top = VirtPage::from_addr(USER_STACK_TOP_ADDR - i * PAGE_SIZE);
+            new_task.page_table.map_page(
+                stack_top,
+                page[0].0,
+                MappingFlags::URWX,
+                MappingSize::Page4KB,
+            );
+            new_task.pages.lock().extend(page);
+        }
+
+        // 将新的任务加入到调度器中
+        let new_task = Arc::new(new_task);
+        // 恢复当前任务的运行状态
+        new_task.resume();
+        // 将任务加入到任务队列中
+        spawn(new_task.clone(), new_task.run());
+        new_tid
+    }
+
+    /// 设置 fault field 以便后面处理
+    pub fn set_fault(&self, vaddr: usize, mut reason: PageFaultReason) {
+        let sepc = self.trap_frame[TrapFrameArgs::SEPC];
+        if let Some(translated) = PageTable::current().translate(VirtAddr::new(vaddr)) {
+            if !translated.1.is_empty() {
+                reason |= PageFaultReason::PRESENT;
+            }
+        }
+        if sepc <= VIRT_ADDR_START {
+            reason |= PageFaultReason::USER;
+        }
+
+        *self.fault.lock() = Some((vaddr, sepc, reason));
+    }
+
+    /// 页表错误处理程序
+    pub async fn handle_page_fault(&self) {
+        let mut fault = self.fault.lock();
+        if let Some((vaddr, sepc, reason)) = *fault {
+            // 内核不会发生 page fault, 如果发生了直接 panic，人工处理
+            if sepc >= VIRT_ADDR_START {
+                panic!("can't trigger page fault in kernel {vaddr} @ {sepc}");
+            }
+            // 获取当前 pager
+            if self.pager.is_none() {
+                panic!("unexpected page fault in user, it don't have a pager {vaddr} @ {sepc}");
+            }
+            let pager = self.pager.clone().unwrap();
+            // 设置 message
+            let mut message = Message::blank();
+            message.content = MessageContent::PageFault {
+                tid: self.tid,
+                uaddr: vaddr,
+                ip: sepc,
+                fault: reason,
+            };
+            // 发送 IPC
+            let ret = self
+                .ipc(
+                    pager.tid,
+                    pager.tid,
+                    &mut message,
+                    IPCFlags::CALL | IPCFlags::KERNEL,
+                )
+                .await;
+            if ret.is_err() || message.content != MessageContent::PageFaultReply {
+                // *self.exit(exit_code)
+                panic!(
+                    "task exit with exception: {:?}",
+                    ExceptionType::InvalidPagerReply
+                );
+            }
+            // Page Fault 处理完毕
+            *fault = None;
+        }
+    }
+
     /// 获取 PageTable
     pub fn page_table(&self) -> PageTable {
         self.page_table.0
@@ -234,6 +357,11 @@ impl MicroKernelTask {
             if *self.destoryed.lock() == true {
                 break;
             }
+            // 如果任务被阻塞了，那么等待调度
+            if *self.state.lock() != TaskState::Runable {
+                yield_now().await;
+                continue;
+            }
             // 如果运行的结果为 Some(()), 那么此次是被 syscall 打断的, 否则是其他原因
             if let Some(_) = run_user_task(tf) {
                 let res = self.syscall(tf[TrapFrameArgs::SYSCALL], tf.args()).await;
@@ -243,6 +371,7 @@ impl MicroKernelTask {
                     Err(err) => tf[TrapFrameArgs::RET] = err as usize,
                 }
             }
+            self.handle_page_fault().await;
         }
         info!("task {} exited successfully", self.get_task_id());
     }
@@ -266,4 +395,27 @@ impl MicroKernelTask {
     pub fn resume(&self) {
         *self.state.lock() = TaskState::Runable;
     }
+
+    /// 申请物理内存
+    pub fn alloc_memory(&self, size: usize, flags: PMAllocFlags) -> usize {
+        let pages = frame_alloc(align_up(size, PAGE_SIZE) / PAGE_SIZE);
+        let start = pages[0].0;
+        // 清空所有页表
+        if flags.contains(PMAllocFlags::ZEROD) {
+            pages.iter().for_each(|x| x.0.drop_clear());
+        }
+        self.pages.lock().extend(pages);
+        start.to_addr()
+    }
+
+    /// 映射内存
+    pub fn map_page(&self, vpn: VirtPage, ppn: PhysPage) {
+        self.page_table()
+            .map_page(vpn, ppn, MappingFlags::URWX, MappingSize::Page4KB);
+    }
+}
+
+/// 获取当前正在运行的 MicroKernel Task
+pub fn current_microkernel_task() -> Option<Arc<MicroKernelTask>> {
+    current_task().downcast_arc::<MicroKernelTask>().ok()
 }

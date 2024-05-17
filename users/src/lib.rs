@@ -2,14 +2,20 @@
 #![no_main]
 #![feature(panic_info_message)]
 
+extern crate alloc;
+
 mod console;
 pub mod syscall;
 
 use buddy_system_allocator::LockedHeap;
 pub use console::print;
+use syscall_consts::SysCallError;
 
 use core::panic::PanicInfo;
 use syscall::exit;
+
+/// 页表大小
+pub const PAGE_SIZE: usize = 4096;
 
 /// 用户程序默认堆大小
 const USER_HEAP_SIZE: usize = 0x2000;
@@ -17,9 +23,22 @@ const USER_HEAP_SIZE: usize = 0x2000;
 /// 堆分配器使用的空间
 static mut HEAP_SPACE: [u8; USER_HEAP_SIZE] = [0; USER_HEAP_SIZE];
 
+/// 将 SysCallError 重新导出为 UserError
+pub type UserError = SysCallError;
+
+/// 将 a 按照 b 进行 align up
+pub fn align_up(a: usize, b: usize) -> usize {
+    (a + b - 1) / b * b
+}
+
+/// 将 a 按照 b 进行 align down
+pub fn align_down(a: usize, b: usize) -> usize {
+    a / b * b
+}
+
 /// 堆分配器
 #[global_allocator]
-static HEAP: LockedHeap::<32> = LockedHeap::empty();
+static HEAP: LockedHeap<32> = LockedHeap::empty();
 
 /// 程序真正的入口，会在这里进行初始化
 #[link_section = ".text.entry"]
@@ -35,7 +54,8 @@ fn _start() -> ! {
         // Clear BSS
         core::slice::from_raw_parts_mut(_sbss as *mut u8, _ebss as usize - _sbss as usize).fill(0);
         // Init heap allocator
-        HEAP.lock().init(HEAP_SPACE.as_ptr() as usize, HEAP_SPACE.len());
+        HEAP.lock()
+            .init(HEAP_SPACE.as_ptr() as usize, HEAP_SPACE.len());
         // Call main function
         main();
     }

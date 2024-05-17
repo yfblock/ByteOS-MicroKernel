@@ -1,5 +1,7 @@
 use core::fmt::{Error, Write};
 
+use alloc::format;
+
 use crate::syscall::serial_write;
 
 struct WriteImpl;
@@ -32,6 +34,6 @@ macro_rules! println {
 #[inline]
 pub fn print(args: core::fmt::Arguments) {
     WriteImpl
-        .write_fmt(args)
+        .write_str(&format!("{}", args))
         .expect("can't write string in logging module.");
 }

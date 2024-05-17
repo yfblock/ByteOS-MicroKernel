@@ -1,7 +1,13 @@
 use core::{arch::asm, panic};
 
 use spin::Mutex;
-use syscall_consts::{IPCFlags, Message, MessageContent, Notify, NotifyEnum::{self, IRQ, TIMER}, SysCall, IPC_ANY};
+use syscall_consts::{
+    IPCFlags, Message, MessageContent, Notify,
+    NotifyEnum::{self, IRQ, TIMER},
+    SysCall, IPC_ANY,
+};
+
+use crate::println;
 
 /// riscv64 发送 syscall
 #[cfg(target_arch = "riscv64")]
@@ -88,13 +94,13 @@ pub fn recv_notification_as_message(message: &mut Message) -> isize {
         TIMER => {
             message.content = MessageContent::NotifyTimer;
             0
-        },
+        }
         IRQ => {
             message.content = MessageContent::NotifyIRQ;
             0
-        },
+        }
         NotifyEnum::ASYNC(tid) => todo!("tid: {tid} implment async task notification"),
-        unexpected => panic!("unhandled notification: {:?}", unexpected)
+        unexpected => panic!("unhandled notification: {:?}", unexpected),
     }
 }
 
@@ -119,12 +125,8 @@ pub fn ip_recv_any(message: &mut Message) -> isize {
                 // TODO: Check src is from kernel, if not print warning and ignore it.
                 *PENDING_NOTIFICATIONS.lock() |= notications;
                 return recv_notification_as_message(message);
-            },
-            _ => {
-                if ret < 0 {
-
-                }
             }
+            _ => return ret,
         }
     }
 }
@@ -142,13 +144,44 @@ pub fn ipc_recv(src: usize, message: &mut Message) -> isize {
 /// 发送或接收 IPC
 #[inline]
 pub fn sys_ipc(dst: usize, src: usize, message: &mut Message, flags: IPCFlags) -> isize {
-    syscall(SysCall::IPC.into(), [dst, src, message as *mut _ as usize, flags.bits()])
+    syscall(
+        SysCall::IPC.into(),
+        [dst, src, message as *mut _ as usize, flags.bits()],
+    )
+}
+
+/// 发送 ipc 请求
+#[inline]
+pub fn ipc_send_noblock(dst: usize, message: &mut Message) -> isize {
+    return sys_ipc(dst, 0, message, IPCFlags::SEND | IPCFlags::NON_BLOCK);
+}
+
+/// 回复 IPC 请求
+#[inline]
+pub fn ipc_reply(dst: usize, message: &mut Message) -> isize {
+    let ret = ipc_send_noblock(dst, message);
+    if ret < 0 {
+        println!("[error] unexpected error {}", ret);
+    }
+    ret
+}
+
+/// 创建任务
+#[inline]
+pub fn sys_task_create(name: &str, entry: usize, pager: usize) -> isize {
+    syscall(
+        SysCall::TaskCreate.into(),
+        [name.as_ptr() as usize, entry, pager, 0],
+    )
 }
 
 /// 串口输出
 #[inline]
 pub fn serial_write(buf: &[u8]) -> usize {
-    syscall(SysCall::SerialWrite.into(), [buf.as_ptr() as usize, buf.len(), 0, 0]) as _
+    syscall(
+        SysCall::SerialWrite.into(),
+        [buf.as_ptr() as usize, buf.len(), 0, 0],
+    ) as _
 }
 
 /// 设置一个定时器, 时间到了内核会发送 Notification (单位: ms)
@@ -177,6 +210,12 @@ pub fn shutdown() -> ! {
     unreachable!("This computor should shutdown.")
 }
 
+/// 销毁任务
+#[inline]
+pub fn task_destory(tid: usize) -> isize {
+    syscall(SysCall::TaskDestory.into(), [tid, 0, 0, 0]) as _
+}
+
 /// 获取当前的任务 id
 pub fn task_self() -> usize {
     static TASK_SELF: Mutex<usize> = Mutex::new(0);
@@ -187,4 +226,22 @@ pub fn task_self() -> usize {
     let tid = syscall(SysCall::TaskSelf.into(), Default::default()) as usize;
     *TASK_SELF.lock() = tid;
     tid
+}
+
+/// 给特定的 task 申请物理页
+#[inline]
+pub fn sys_pm_alloc(tid: usize, size: usize, flags: usize) -> isize {
+    syscall(SysCall::PMAlloc.into(), [tid, size, flags, 0])
+}
+
+/// 给特定的 task 映射内存
+#[inline]
+pub fn sys_vm_map(tid: usize, uaddr: usize, paddr: usize, attrs: usize) -> isize {
+    syscall(SysCall::VMMap.into(), [tid, uaddr, paddr, attrs])
+}
+
+/// 给特定的 task 取消映射内存
+#[inline]
+pub fn sys_vm_unmap(tid: usize, uaddr: usize) -> isize {
+    syscall(SysCall::VMUnmap.into(), [tid, uaddr, 0, 0])
 }

@@ -1,6 +1,6 @@
 [patch]
 
 [workspace]
-members = [ "crates/syscall_consts", "microkernel" ]
-resolver = "2"
 exclude = ["users"]
+members = ["crates/syscall_consts", "microkernel"]
+resolver = "2"

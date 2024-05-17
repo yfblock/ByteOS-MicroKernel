@@ -11,7 +11,7 @@ use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 /// 一个宏，根据参数来表示 bit 位
 pub macro bit($x:expr) {
-    1 << ($x)
+    (1 << ($x))
 }
 
 /// 系统调用编号
@@ -39,7 +39,7 @@ pub enum SysCall {
     /// 映射虚拟内存
     VMMap = 10,
     /// 取消映射虚拟内存
-    VNUnmap = 11,
+    VMUnmap = 11,
     /// 监听中断
     IrqListen = 12,
     /// 取消监听中断
@@ -157,7 +157,7 @@ pub enum MessageType {
     TcpipClosedmsg = 62,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Notify(usize);
 
 impl Notify {
@@ -187,6 +187,25 @@ impl Notify {
             }
         }
         None
+    }
+
+    /// 弹出指定 Notify
+    pub fn pop_specify(&mut self, notification: NotifyEnum) -> Option<NotifyEnum> {
+        // 根据 Notification 获取 index
+        let index = match notification {
+            NotifyEnum::TIMER => 0,
+            NotifyEnum::IRQ => 1,
+            NotifyEnum::ABORTED => 2,
+            NotifyEnum::ASYNC(tid) => 3 + tid as usize,
+        };
+        match self.0 & bit!(index) != 0 {
+            // 含有特定的 Notification
+            true => {
+                self.0 &= !bit!(index);
+                Some(notification)
+            }
+            false => None,
+        }
     }
 
     /// 判断是否含有 Notifications
@@ -243,9 +262,18 @@ pub const FROM_KERNEL: usize = usize::MAX;
 
 /// 消息内容，这是一个 Rust 的 enum 结构
 /// 后续可以在这个里面添加消息结构以增加消息的类型。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageContent {
-    NotifyField { notications: Notify },
+    PageFault {
+        tid: usize,
+        uaddr: usize,
+        ip: usize,
+        fault: PageFaultReason,
+    },
+    PageFaultReply,
+    NotifyField {
+        notications: Notify,
+    },
     NotifyIRQ,
     NotifyTimer,
     None,
@@ -274,10 +302,37 @@ bitflags! {
     /// IPC 标志位
     #[derive(Debug, Clone, Copy)]
     pub struct IPCFlags: usize {
-        const SEND    =  bit!(16);
-        const RECV    =  bit!(17);
+        const SEND      =  bit!(16);
+        const RECV      =  bit!(17);
         const NON_BLOCK =  bit!(18);
-        const KERNEL  =  bit!(19);
-        const CALL    = Self::SEND.bits() | Self::RECV.bits();
+        const KERNEL    =  bit!(19);
+        const CALL      = Self::SEND.bits() | Self::RECV.bits();
     }
+
+    /// 页错误的原因
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct PageFaultReason: usize {
+        const READ      = bit!(0);
+        const WRITE     = bit!(1);
+        const EXEC      = bit!(2);
+        const USER      = bit!(3);
+        const PRESENT   = bit!(4);
+    }
+
+    /// 申请内存 Flags
+    #[derive(Debug, Clone, Copy)]
+    pub struct PMAllocFlags: usize {
+        const UNINITIALIZED = bit!(0);
+        const ZEROD         = bit!(1);
+        const ALIGNED       = bit!(2);
+    }
+}
+
+/// 异常类型
+#[derive(Debug, Clone, Copy)]
+pub enum ExceptionType {
+    GraceExit,
+    InvalidAddr,
+    InvalidPagerReply,
+    IllegalException,
 }

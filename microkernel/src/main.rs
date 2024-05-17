@@ -10,7 +10,8 @@ use executor::{DEFAULT_EXECUTOR, TASK_MAP};
 use log::info;
 use polyhal::{get_cpu_num, get_mem_areas, TrapFrame, TrapType, VIRT_ADDR_START};
 use spin::Mutex;
-use task::MicroKernelTask;
+use syscall_consts::PageFaultReason;
+use task::{current_microkernel_task, MicroKernelTask};
 
 pub mod async_ops;
 pub mod consts;
@@ -22,7 +23,7 @@ mod task;
 mod utils;
 
 #[polyhal::arch_interrupt]
-fn interrupt_handler(_tf: TrapFrame, trap_type: TrapType) {
+fn interrupt_handler(tf: TrapFrame, trap_type: TrapType) {
     match trap_type {
         // UserEnvCall 不会在这里处理，会在 Async function 内部处理。
         TrapType::UserEnvCall => {}
@@ -34,6 +35,18 @@ fn interrupt_handler(_tf: TrapFrame, trap_type: TrapType) {
                 .filter_map(|x| x.upgrade())
                 .filter_map(|x| x.downcast_arc::<MicroKernelTask>().ok())
                 .for_each(|x| x.check_timeout());
+        }
+        TrapType::InstructionPageFault(vaddr) => {
+            current_microkernel_task().inspect(|x| x.set_fault(vaddr, PageFaultReason::EXEC));
+        }
+        TrapType::StorePageFault(vaddr) => {
+            current_microkernel_task().inspect(|x| x.set_fault(vaddr, PageFaultReason::WRITE));
+        }
+        TrapType::LoadPageFault(vaddr) => {
+            current_microkernel_task().inspect(|x| x.set_fault(vaddr, PageFaultReason::READ));
+        }
+        TrapType::IllegalInstruction(vaddr) => {
+            panic!("illegal instruction @ {:#x} {:#x?}", vaddr, tf);
         }
         _ => {
             log::debug!("trap {:#x?}", trap_type);
@@ -52,7 +65,7 @@ fn main(hart_id: usize) {
         .is_ok()
     {
         // 设置 log 级别
-        lang_items::init(Some("debug"));
+        lang_items::init(Some(option_env!("LOG").unwrap_or("debug")));
         println!("Boot @ {}", hart_id);
         // 初始化堆分配器
         allocator::init();

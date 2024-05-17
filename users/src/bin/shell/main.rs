@@ -9,7 +9,7 @@ extern crate alloc;
 
 #[no_mangle]
 fn main() {
-    println!("Hello World!");
+    println!("Hello shell!");
     println!("Shell server id: {}", task_self());
     // 输出系统时间
     println!("UPTIME: {}", sys_uptime());

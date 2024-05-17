@@ -1,22 +1,33 @@
 use executor::{tid2task, AsyncTask};
 use log::info;
-use polyhal::{shutdown, time::Time};
-use syscall_consts::{
-    IPCFlags, Message, MessageContent, SysCall, SysCallError, FROM_KERNEL, IPC_ANY,
+use polyhal::{
+    addr::{PhysPage, VirtPage},
+    shutdown,
+    time::Time,
 };
 
-use crate::{async_ops::WaitResume, lang_items::puts, task::MicroKernelTask, utils::UserBuffer};
+use syscall_consts::{
+    IPCFlags, Message, MessageContent, NotifyEnum, PMAllocFlags, SysCall, SysCallError,
+    FROM_KERNEL, IPC_ANY,
+};
+
+use crate::{
+    async_ops::WaitResume,
+    lang_items::puts,
+    task::{MicroKernelTask, TaskState},
+    utils::UserBuffer,
+};
 
 type SysResult = Result<usize, SysCallError>;
 
 impl MicroKernelTask {
     /// 串口输出
-    pub fn sys_serial_write(
+    pub async fn sys_serial_write(
         &self,
         buf: UserBuffer<u8>,
         buf_len: usize,
     ) -> Result<usize, SysCallError> {
-        let bytes = buf.slice_mut_with_len(buf_len);
+        let bytes = buf.slice_mut_with_len(buf_len, self).await;
         puts(bytes);
         Ok(bytes.len())
     }
@@ -42,6 +53,82 @@ impl MicroKernelTask {
     /// 关闭计算机
     pub fn sys_shutdown(&self) -> ! {
         shutdown();
+    }
+
+    /// 发送 IPC 信息
+    pub async fn send_message(
+        &self,
+        dst: usize,
+        message: &mut Message,
+        flags: IPCFlags,
+    ) -> SysResult {
+        // 不能给自己发送 IPC
+        if dst == self.tid {
+            return Err(SysCallError::InvalidArg);
+        }
+
+        // 获取收信任务
+        let dst = tid2task(dst)
+            .ok_or(SysCallError::InvalidArg)?
+            .downcast_arc::<MicroKernelTask>()
+            .map_err(|_| SysCallError::InvalidArg)?;
+
+        // 判断目的任务是否正在准备接受信息
+        let ready = {
+            let dst_state = dst.state.lock();
+            let dst_wait_for = dst.wait_for.lock();
+            *dst_state == TaskState::Blocked
+                && (*dst_wait_for == Some(IPC_ANY) || *dst_wait_for == Some(self.tid))
+        };
+
+        // 如果目的任务并没有处于等待状态
+        if !ready {
+            // 如果 IPC 含有 NON_BLOCK 标志位，则直接返回
+            if flags.contains(IPCFlags::NON_BLOCK) {
+                return Err(SysCallError::WouldBlock);
+            }
+
+            // 如果目的任务也在等待给当前任务发送消息，会发生死锁
+            if self
+                .senders
+                .lock()
+                .iter()
+                .find(|x| **x == dst.tid)
+                .is_some()
+            {
+                return Err(SysCallError::DeadLock);
+            }
+
+            // 将当前任务添加到目的任务的等待列表
+            dst.senders.lock().push(self.tid);
+            // 阻塞当前任务
+            self.block();
+            // 等待当前任务恢复
+            WaitResume(self).await;
+
+            // 如果目标任务已经完成
+            if self
+                .notifications
+                .lock()
+                .pop_specify(NotifyEnum::ABORTED)
+                .is_some()
+            {
+                return Err(SysCallError::Aborted);
+            }
+        }
+        // 设置 message 信息
+        let source = if flags.contains(IPCFlags::KERNEL) {
+            FROM_KERNEL
+        } else {
+            self.tid
+        };
+        *dst.message.lock() = Some(Message {
+            source,
+            content: message.content,
+        });
+        // 恢复 dst 任务运行
+        dst.resume();
+        Ok(0)
     }
 
     /// 接收 IPC 信息
@@ -97,6 +184,27 @@ impl MicroKernelTask {
         Ok(0)
     }
 
+    /// 进行 IPC 通信
+    pub async fn ipc(
+        &self,
+        dst: usize,
+        src: usize,
+        message: &mut Message,
+        flags: IPCFlags,
+    ) -> SysResult {
+        // 发送 IPC 消息
+        if flags.contains(IPCFlags::SEND) {
+            self.send_message(dst, message, flags).await?;
+        }
+
+        // 接收 IPC 消息
+        if flags.contains(IPCFlags::RECV) {
+            self.recv_message(src, message, flags).await?;
+        }
+
+        Ok(0)
+    }
+
     /// 处理 IPC 请求
     pub async fn sys_ipc(
         &self,
@@ -117,13 +225,78 @@ impl MicroKernelTask {
             return Err(SysCallError::InvalidArg);
         }
 
-        // TODO: Write ipc send function
-        if flags.contains(IPCFlags::SEND) {}
+        self.ipc(dst, src, buffer.get_mut(self).await, flags).await
+    }
 
-        // 接收 IPC 消息
-        if flags.contains(IPCFlags::RECV) {
-            self.recv_message(src, buffer.get_mut(), flags).await?;
+    /// 创建新的任务
+    pub async fn sys_task_create(
+        &self,
+        name_buf: UserBuffer<i8>,
+        entry_point: usize,
+        pager: usize,
+    ) -> SysResult {
+        let name = name_buf
+            .get_str(self)
+            .await
+            .ok_or(SysCallError::InvalidArg)?;
+        let pager = tid2task(pager)
+            .map(|x| x.downcast_arc::<MicroKernelTask>().ok())
+            .flatten();
+
+        Ok(Self::new(name, entry_point, pager))
+    }
+
+    /// 申请物理内存
+    pub fn sys_pm_alloc(&self, dst: usize, size: usize, flags: usize) -> SysResult {
+        let mut flags = PMAllocFlags::from_bits(flags).ok_or(SysCallError::InvalidArg)?;
+
+        flags |= PMAllocFlags::ZEROD;
+        // 如果需要申请页表的任务就是当前任务
+        // 直接处理
+        if dst == self.tid {
+            return Ok(self.alloc_memory(size, flags));
         }
+
+        // 获取申请内存的任务
+        let dst = tid2task(dst)
+            .ok_or(SysCallError::InvalidTask)?
+            .downcast_arc::<MicroKernelTask>()
+            .map_err(|_| SysCallError::InvalidTask)?;
+
+        // 如果 dst 任务和当前任务不存在联系
+        if dst.pager.as_ref().ok_or(SysCallError::InvalidTask)?.tid != self.tid {
+            return Err(SysCallError::InvalidTask);
+        }
+
+        // 为 dst 任务申请页表
+        Ok(dst.alloc_memory(size, flags))
+    }
+
+    /// 映射虚拟内存
+    /// TODO: use flags to control page privilege
+    pub fn sys_vm_map(&self, dst: usize, uaddr: usize, paddr: usize, _flags: usize) -> SysResult {
+        // 如果需要申请页表的任务就是当前任务
+        // 直接处理
+        let vpn = VirtPage::from_addr(uaddr);
+        let ppn = PhysPage::from_addr(paddr);
+        if dst == self.tid {
+            // 映射内存
+            self.map_page(vpn, ppn);
+            return Ok(0);
+        }
+
+        // 获取申请内存的任务
+        let dst = tid2task(dst)
+            .ok_or(SysCallError::InvalidTask)?
+            .downcast_arc::<MicroKernelTask>()
+            .map_err(|_| SysCallError::InvalidTask)?;
+
+        // 如果 dst 任务和当前任务不存在联系
+        if dst.pager.as_ref().ok_or(SysCallError::InvalidTask)?.tid != self.tid {
+            return Err(SysCallError::InvalidTask);
+        }
+
+        dst.map_page(vpn, ppn);
 
         Ok(0)
     }
@@ -139,16 +312,16 @@ impl MicroKernelTask {
             }
             SysCall::Notify => todo!(),
             // 串口输出
-            SysCall::SerialWrite => self.sys_serial_write(args[0].into(), args[1]),
+            SysCall::SerialWrite => self.sys_serial_write(args[0].into(), args[1]).await,
             SysCall::SerialRead => todo!(),
-            SysCall::TaskCreate => todo!(),
+            SysCall::TaskCreate => self.sys_task_create(args[0].into(), args[1], args[2]).await,
             SysCall::TaskDestory => todo!(),
             SysCall::TaskExit => self.sys_task_exit(),
             // 获取当前任务 id
             SysCall::TaskSelf => Ok(self.get_task_id()),
-            SysCall::PMAlloc => todo!(),
-            SysCall::VMMap => todo!(),
-            SysCall::VNUnmap => todo!(),
+            SysCall::PMAlloc => self.sys_pm_alloc(args[0], args[1], args[2]),
+            SysCall::VMMap => self.sys_vm_map(args[0], args[1], args[2], args[3]),
+            SysCall::VMUnmap => todo!(),
             SysCall::IrqListen => todo!(),
             SysCall::IrqUnlisten => todo!(),
             // 设置定时器，单位 ms

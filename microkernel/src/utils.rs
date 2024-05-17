@@ -1,6 +1,12 @@
-use core::marker::PhantomData;
+use core::{ffi::CStr, marker::PhantomData};
 
-use polyhal::addr::VirtAddr;
+use polyhal::{
+    addr::VirtAddr,
+    pagetable::{MappingFlags, PageTable},
+};
+use syscall_consts::PageFaultReason;
+
+use crate::task::MicroKernelTask;
 
 /// 将 `value` 根据 `align` 上对齐
 #[allow(dead_code)]
@@ -23,6 +29,23 @@ impl<T> From<usize> for UserBuffer<T> {
     }
 }
 
+/// 判断虚拟地址在当前页表中是否被映射
+#[inline]
+pub fn is_mapped(vaddr: VirtAddr) -> bool {
+    PageTable::current()
+        .translate(vaddr)
+        .map(|(_paddr, flags)| flags != MappingFlags::empty())
+        .unwrap_or(false)
+}
+
+/// 处理页表错误
+pub async fn handle_page_fault(vaddr: VirtAddr, task: &MicroKernelTask) {
+    if !is_mapped(vaddr) {
+        task.set_fault(vaddr.addr(), PageFaultReason::USER | PageFaultReason::WRITE);
+        task.handle_page_fault().await;
+    }
+}
+
 #[allow(dead_code)]
 impl<T> UserBuffer<T> {
     #[inline]
@@ -30,18 +53,28 @@ impl<T> UserBuffer<T> {
         self.addr.addr()
     }
     #[inline]
-    pub fn get_ref(&self) -> &'static T {
+    pub async fn get_ref(&self, task: &MicroKernelTask) -> &'static T {
+        handle_page_fault(self.addr, task).await;
         self.addr.get_ref::<T>()
     }
 
     #[inline]
-    pub fn get_mut(&self) -> &'static mut T {
+    pub async fn get_mut(&self, task: &MicroKernelTask) -> &'static mut T {
+        handle_page_fault(self.addr, task).await;
         self.addr.get_mut_ref::<T>()
     }
 
     #[inline]
-    pub fn slice_mut_with_len(&self, len: usize) -> &'static mut [T] {
+    pub async fn slice_mut_with_len(&self, len: usize, task: &MicroKernelTask) -> &'static mut [T] {
+        handle_page_fault(self.addr, task).await;
         self.addr.slice_mut_with_len(len)
+    }
+}
+
+impl UserBuffer<i8> {
+    pub async fn get_str(&self, task: &MicroKernelTask) -> Option<&str> {
+        handle_page_fault(self.addr, task).await;
+        unsafe { CStr::from_ptr(self.addr.get_ref()).to_str().ok() }
     }
 }
 

@@ -1,12 +1,15 @@
 #![no_std]
 #![no_main]
+#![feature(concat_idents)]
 
 mod task;
 
 use syscall_consts::{Message, MessageContent::*, IPC_ANY};
-use users::syscall::{ipc_recv, shutdown, sys_time, sys_uptime, task_self};
+use users::syscall::{
+    ipc_recv, ipc_reply, shutdown, sys_time, sys_uptime, task_destory, task_self,
+};
 
-use crate::task::spawn_servers;
+use crate::task::{spawn_servers, TASK_LIST};
 
 #[macro_use]
 extern crate users;
@@ -33,8 +36,37 @@ fn main() {
                 println!("UPTIME: {}", sys_uptime());
                 shutdown();
             }
-            _ => {},
+            // 页错误
+            PageFault {
+                tid,
+                uaddr,
+                ip,
+                fault,
+            } => {
+                // println!(
+                //     "IPC page fault: {}, {:#x} @ {:#x} reason: {:?}",
+                //     tid, uaddr, ip, fault
+                // );
+
+                let ret = TASK_LIST
+                    .lock()
+                    .iter()
+                    .find(|x| x.tid == tid)
+                    .map(|x| x.handle_page_fault(uaddr, ip, fault))
+                    .expect("can't find page fault task in root server");
+
+                if ret.is_err() {
+                    println!("task fault: {:?}", ret.err());
+                    task_destory(tid);
+                    continue;
+                }
+
+                message.content = PageFaultReply;
+                ipc_reply(tid, &mut message);
+            }
+            _ => {
+                // println!("ipc message: {:#x?}", message);
+            }
         }
-        
     }
 }

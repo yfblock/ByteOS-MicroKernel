@@ -20,7 +20,9 @@ SECTIONS
         *(.data .data.*)
         *(.sdata .sdata.*)
     }
+    . = ALIGN(4K);
     .bss : {
+        .bss.page_data = .;
         _sbss = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)
