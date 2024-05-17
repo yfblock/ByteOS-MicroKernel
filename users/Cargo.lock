@@ -122,6 +122,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vm"
+version = "0.1.0"
+dependencies = [
+ "spin",
+ "syscall_consts",
+ "users",
+ "xmas-elf",
+]
+
+[[package]]
 name = "xmas-elf"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

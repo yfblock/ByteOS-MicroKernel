@@ -98,4 +98,8 @@ clean:
 addr2line:
 	addr2line -sfipe $(KERNEL_ELF) | rustfilt
 
-.PHONY: all run build clean gdb justbuild user run-user
+fmt:
+	cargo fmt
+	cd users && cargo fmt
+
+.PHONY: all run build clean gdb justbuild user run-user fmt

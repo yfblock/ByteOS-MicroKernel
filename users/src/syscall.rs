@@ -184,6 +184,15 @@ pub fn serial_write(buf: &[u8]) -> usize {
     ) as _
 }
 
+/// 串口输入，返回值为读取的字符数
+#[inline]
+pub fn serial_read(buf: &[u8]) -> usize {
+    syscall(
+        SysCall::SerialRead.into(),
+        [buf.as_ptr() as usize, buf.len(), 0, 0],
+    ) as _
+}
+
 /// 设置一个定时器, 时间到了内核会发送 Notification (单位: ms)
 #[inline]
 pub fn sys_time(ms: usize) -> usize {

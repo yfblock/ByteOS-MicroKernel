@@ -1,7 +1,8 @@
-use executor::{tid2task, AsyncTask};
+use executor::{tid2task, yield_now, AsyncTask};
 use log::info;
 use polyhal::{
     addr::{PhysPage, VirtPage},
+    debug::DebugConsole,
     shutdown,
     time::Time,
 };
@@ -30,6 +31,25 @@ impl MicroKernelTask {
         let bytes = buf.slice_mut_with_len(buf_len, self).await;
         puts(bytes);
         Ok(bytes.len())
+    }
+
+    /// 串口输入，返回值为读取的字符数
+    pub async fn sys_serial_read(
+        &self,
+        buf: UserBuffer<u8>,
+        buf_len: usize,
+    ) -> Result<usize, SysCallError> {
+        let bytes = buf.slice_mut_with_len(buf_len, self).await;
+        assert!(bytes.len() > 0, "buffer is not a valid buffer");
+        // 读取串口数据 直到有输出
+        loop {
+            if let Some(c) = DebugConsole::getchar() {
+                bytes[0] = c;
+                break;
+            }
+            yield_now().await;
+        }
+        Ok(1)
     }
 
     /// 退出当前任务
@@ -313,7 +333,7 @@ impl MicroKernelTask {
             SysCall::Notify => todo!(),
             // 串口输出
             SysCall::SerialWrite => self.sys_serial_write(args[0].into(), args[1]).await,
-            SysCall::SerialRead => todo!(),
+            SysCall::SerialRead => self.sys_serial_read(args[0].into(), args[1]).await,
             SysCall::TaskCreate => self.sys_task_create(args[0].into(), args[1], args[2]).await,
             SysCall::TaskDestory => todo!(),
             SysCall::TaskExit => self.sys_task_exit(),

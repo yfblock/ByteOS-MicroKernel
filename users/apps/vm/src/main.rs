@@ -5,9 +5,7 @@
 mod task;
 
 use syscall_consts::{Message, MessageContent::*, IPC_ANY};
-use users::syscall::{
-    ipc_recv, ipc_reply, shutdown, sys_time, sys_uptime, task_destory, task_self,
-};
+use users::syscall::{ipc_recv, ipc_reply, sys_time, sys_uptime, task_destory, task_self};
 
 use crate::task::{spawn_servers, TASK_LIST};
 
@@ -34,7 +32,7 @@ fn main() {
             NotifyTimer => {
                 println!("Notify Timer");
                 println!("UPTIME: {}", sys_uptime());
-                shutdown();
+                // shutdown();
             }
             // 页错误
             PageFault {

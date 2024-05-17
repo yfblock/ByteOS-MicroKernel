@@ -10,3 +10,6 @@ buddy_system_allocator = "0.9.1"
 spin = { version = "0.9.8", features = ["mutex"] }
 syscall_consts = { path = "../crates/syscall_consts" }
 xmas-elf = "0.9.0"
+
+[workspace]
+members = ["apps/vm"]

@@ -37,14 +37,17 @@ global_asm!(
     "#,
 );
 
+/// 临时页表，占位，为了方便处理
 #[link_section = ".bss.page_data"]
 static mut TMP_PAGE: [u8; PAGE_SIZE] = [0u8; PAGE_SIZE];
 
+/// 获取临时页表的地址
 #[inline]
 pub fn tmp_page_addr() -> usize {
     unsafe { TMP_PAGE.as_mut_ptr() as usize }
 }
 
+/// 获取临时页表数组
 #[inline]
 pub fn tmp_page_buffer() -> &'static mut [u8] {
     unsafe { core::slice::from_raw_parts_mut(tmp_page_addr() as _, PAGE_SIZE) }
@@ -161,6 +164,7 @@ pub fn spawn_servers() {
             return;
         }
         println!("spawn task {} id {}", name, new_tid);
+        // 迭代段信息，找到利用的最大的虚拟地址
         let mut valloc_next = 0;
         elf_file.program_iter().for_each(|x| {
             // 只处理 LOAD 段信息
