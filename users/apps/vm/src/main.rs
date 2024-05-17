@@ -10,7 +10,9 @@ use syscall_consts::{
     MessageContent::{self, *},
     IPC_ANY,
 };
-use users::syscall::{ipc_recv, ipc_reply, sys_time, sys_uptime, task_destory, task_self};
+use users::syscall::{
+    ipc_recv, ipc_reply, sys_pm_alloc, sys_time, sys_uptime, sys_vm_map, task_destory, task_self,
+};
 
 use crate::task::{register_service, spawn_servers, SERVICE_LIST, TASK_LIST};
 
@@ -105,6 +107,67 @@ fn main() {
 
                 message.content = PageFaultReply;
                 ipc_reply(tid, &mut message);
+            }
+            // 申请物理内存消息
+            VmAllocPhysicalMsg { size } => {
+                // 确保发信消息在队列中
+                assert!(TASK_LIST
+                    .lock()
+                    .iter()
+                    .find(|x| x.tid == message.source)
+                    .is_some());
+
+                // TODO: use mapping attrs to improve security
+                let ret = sys_pm_alloc(message.source, size, 0);
+
+                // 如果申请失败，直接跳过了
+                if ret < 0 {
+                    break;
+                };
+
+                // 准备申请内存
+                let paddr = ret as usize;
+                let uaddr = TASK_LIST
+                    .lock()
+                    .iter_mut()
+                    .find(|x| x.tid == message.source)
+                    .map(|x| x.alloc_size(size))
+                    .unwrap();
+                message.content = VmAllocPhysicalReplyMsg { uaddr, paddr };
+
+                // 映射内存
+                assert!(
+                    sys_vm_map(message.source, uaddr, paddr, 0) >= 0,
+                    "can't map virtual address"
+                );
+                ipc_reply(message.source, &mut message);
+            }
+            VmMapPhysicalMsg {
+                paddr,
+                size,
+                map_flags: _,
+            } => {
+                // 确保发信消息在队列中
+                assert!(TASK_LIST
+                    .lock()
+                    .iter()
+                    .find(|x| x.tid == message.source)
+                    .is_some());
+
+                // 申请虚拟内存
+                let uaddr = TASK_LIST
+                    .lock()
+                    .iter_mut()
+                    .find(|x| x.tid == message.source)
+                    .map(|x| x.alloc_size(size))
+                    .unwrap();
+
+                // 映射内存
+                sys_vm_map(message.source, uaddr, paddr, 0);
+
+                // 回复消息
+                message.content = VmMapPhysicalReplyMsg { uaddr };
+                ipc_reply(message.source, &mut message);
             }
             _ => {
                 // println!("ipc message: {:#x?}", message);

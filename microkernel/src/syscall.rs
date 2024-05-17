@@ -1,8 +1,9 @@
 use executor::{tid2task, yield_now, AsyncTask};
 use log::info;
 use polyhal::{
-    addr::{PhysPage, VirtPage},
+    addr::{PhysPage, VirtAddr, VirtPage},
     debug::DebugConsole,
+    pagetable::PageTable,
     shutdown,
     time::Time,
 };
@@ -332,6 +333,41 @@ impl MicroKernelTask {
         Ok(0)
     }
 
+    /// 取消映射虚拟内存
+    pub fn sys_vm_unmap(&self, dst: usize, uaddr: usize) -> SysResult {
+        // 如果需要申请页表的任务就是当前任务
+        // 直接处理
+        let vpn = VirtPage::from_addr(uaddr);
+        if dst == self.tid {
+            // 映射内存
+            self.page_table().unmap_page(vpn);
+            return Ok(0);
+        }
+
+        // 获取申请内存的任务
+        let dst = tid2task(dst)
+            .ok_or(SysCallError::InvalidTask)?
+            .downcast_arc::<MicroKernelTask>()
+            .map_err(|_| SysCallError::InvalidTask)?;
+
+        // 如果 dst 任务和当前任务不存在联系
+        if dst.pager.as_ref().ok_or(SysCallError::InvalidTask)?.tid != self.tid {
+            return Err(SysCallError::InvalidTask);
+        }
+
+        dst.page_table().unmap_page(vpn);
+        Ok(0)
+    }
+
+    /// 翻译虚拟地址
+    pub fn sys_trans_paddr(&self, uaddr: usize) -> SysResult {
+        Ok(PageTable::current()
+            .translate(VirtAddr::new(uaddr))
+            .ok_or(SysCallError::InvalidUaddr)?
+            .0
+            .addr())
+    }
+
     /// 处理系统调用
     pub async fn syscall(&self, id: usize, args: [usize; 6]) -> Result<usize, SysCallError> {
         info!("task: {} syscall: {:?}", self.tid, SysCall::try_from(id));
@@ -344,15 +380,21 @@ impl MicroKernelTask {
             SysCall::Notify => todo!(),
             // 串口输出
             SysCall::SerialWrite => self.sys_serial_write(args[0].into(), args[1]).await,
+            // 串口输入
             SysCall::SerialRead => self.sys_serial_read(args[0].into(), args[1]).await,
+            // 创建任务
             SysCall::TaskCreate => self.sys_task_create(args[0].into(), args[1], args[2]).await,
             SysCall::TaskDestory => todo!(),
+            // 退出任务
             SysCall::TaskExit => self.sys_task_exit(),
             // 获取当前任务 id
             SysCall::TaskSelf => Ok(self.get_task_id()),
+            // 申请物理内存
             SysCall::PMAlloc => self.sys_pm_alloc(args[0], args[1], args[2]),
+            // 映射内存
             SysCall::VMMap => self.sys_vm_map(args[0], args[1], args[2], args[3]),
-            SysCall::VMUnmap => todo!(),
+            // 取消映射内存
+            SysCall::VMUnmap => self.sys_vm_unmap(args[0], args[1]),
             SysCall::IrqListen => todo!(),
             SysCall::IrqUnlisten => todo!(),
             // 设置定时器，单位 ms
@@ -362,6 +404,8 @@ impl MicroKernelTask {
             SysCall::HinaVM => todo!(),
             // 关闭系统
             SysCall::Shutdown => self.sys_shutdown(),
+            // 翻译虚拟地址
+            SysCall::TransVAddr => self.sys_trans_paddr(args[0]),
         }
     }
 }

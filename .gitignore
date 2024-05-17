@@ -1,3 +1,5 @@
 target
 qemu.log
 1.log
+mount.img
+virt.out

@@ -5,7 +5,7 @@ use spin::{Lazy, Mutex};
 use syscall_consts::PageFaultReason;
 use users::{
     align_down, align_up,
-    syscall::{sys_pm_alloc, sys_task_create, sys_vm_map, task_self},
+    syscall::{sys_pm_alloc, sys_task_create, sys_vm_map, sys_vm_unmap, task_self},
     UserError, PAGE_SIZE,
 };
 use xmas_elf::{program::Type, ElfFile};
@@ -38,6 +38,14 @@ global_asm!(
         bin_pong_start:
         .incbin "target/riscv64gc-unknown-none-elf/release/pong"
         bin_pong_end:
+
+        bin_blk_device_start:
+        .incbin "target/riscv64gc-unknown-none-elf/release/blk_device"
+        bin_blk_device_end:
+
+        bin_fs_start:
+        .incbin "target/riscv64gc-unknown-none-elf/release/fs"
+        bin_fs_end:
     "#,
 );
 
@@ -67,9 +75,15 @@ static SERVERS_BIN: Lazy<Vec<(&str, &[u8])>> = Lazy::new(|| {
         fn bin_shell_end();
         fn bin_pong_start();
         fn bin_pong_end();
+        fn bin_blk_device_start();
+        fn bin_blk_device_end();
+        fn bin_fs_start();
+        fn bin_fs_end();
     }
     include_app!(container, shell);
     include_app!(container, pong);
+    include_app!(container, blk_device);
+    include_app!(container, fs);
     container
 });
 
@@ -149,8 +163,8 @@ impl Task {
             let offset: usize = x.offset() as usize + vaddr - start;
             let rsize = cmp::min(end - vaddr, PAGE_SIZE);
 
-            // TODO: 将当前任务的 TMP_PAGE 取消映射
-            // sys_vm_unmap(task_self(), tmp_page_addr());
+            // 取消映射临时内存
+            sys_vm_unmap(task_self(), tmp_page_addr());
 
             // TODO: use attrs to control privilege
             sys_vm_map(task_self(), tmp_page_addr(), paddr, 0);
@@ -163,6 +177,15 @@ impl Task {
         sys_vm_map(self.tid, uaddr, paddr, 0);
 
         Ok(())
+    }
+
+    /// 申请虚拟内存
+    pub fn alloc_size(&mut self, size: usize) -> usize {
+        // 确保申请的内存都是 4K 对齐的
+        assert!(size % PAGE_SIZE == 0);
+        // 移动 valloc_next 指针
+        self.valloc_next += size;
+        self.valloc_next - size
     }
 }
 

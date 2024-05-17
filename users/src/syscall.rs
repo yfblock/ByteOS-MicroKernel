@@ -302,3 +302,60 @@ pub fn service_lookup(name: &str) -> Option<usize> {
         false => None,
     }
 }
+
+/// 申请内存，如果申请成功，返回一个 tuple, 0: vaddr, 1: paddr
+pub fn alloc_memory(size: usize) -> Option<(usize, usize)> {
+    let mut message = Message::blank();
+
+    // 设置申请内存的消息
+    message.content = MessageContent::VmAllocPhysicalMsg { size };
+
+    let ret = ipc_call(VM_SERVER, &mut message);
+    // 判断是否申请成功
+    match ret >= 0 {
+        true => {
+            // 判断返回的消息是否正确
+            if let MessageContent::VmAllocPhysicalReplyMsg { uaddr, paddr } = message.content {
+                Some((uaddr, paddr))
+            } else {
+                None
+            }
+        }
+        false => None,
+    }
+}
+
+/// 映射物理内存，如果映射成功，返回一个映射的虚拟地址
+pub fn map_paddr(paddr: usize, size: usize) -> Option<usize> {
+    let mut message = Message::blank();
+
+    // 设置需要映射的物理地址和 size
+    message.content = MessageContent::VmMapPhysicalMsg {
+        paddr,
+        size,
+        map_flags: 0,
+    };
+
+    let ret = ipc_call(VM_SERVER, &mut message);
+    // 判断是否映射成功
+    match ret >= 0 {
+        true => {
+            // 判断返回的消息是否正确
+            if let MessageContent::VmMapPhysicalReplyMsg { uaddr } = message.content {
+                Some(uaddr)
+            } else {
+                None
+            }
+        }
+        false => None,
+    }
+}
+
+/// 翻译虚拟地址
+pub fn translate_vaddr(vaddr: usize) -> Option<usize> {
+    let ret = syscall(SysCall::TransVAddr.into(), [vaddr, 0, 0, 0]);
+    match ret > 0 {
+        true => Some(ret as usize),
+        false => None,
+    }
+}

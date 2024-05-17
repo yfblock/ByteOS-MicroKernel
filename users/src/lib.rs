@@ -17,6 +17,9 @@ use syscall::exit;
 /// 页表大小
 pub const PAGE_SIZE: usize = 4096;
 
+/// Block 块大小
+pub const BLOCK_SIZE: usize = 0x200;
+
 /// 用户程序默认堆大小
 const USER_HEAP_SIZE: usize = 0x2000;
 

@@ -87,6 +87,12 @@ fn main() {
                     println!("Ping message reply {:?}", message.content);
                 }
             }
+            "help" => {
+                println!("commands available are below:");
+                ["help", "ping"].iter().for_each(|x| {
+                    println!("{:>10}", x);
+                });
+            }
             _ => {}
         }
     }

@@ -416,6 +416,7 @@ impl MicroKernelTask {
 
     /// 映射内存
     pub fn map_page(&self, vpn: VirtPage, ppn: PhysPage) {
+        log::debug!("map {:?} -> {:?}", vpn, ppn);
         self.page_table()
             .map_page(vpn, ppn, MappingFlags::URWX, MappingSize::Page4KB);
     }

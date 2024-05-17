@@ -3,13 +3,16 @@ name = "users"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 buddy_system_allocator = "0.9.1"
 spin = { version = "0.9.8", features = ["mutex"] }
 syscall_consts = { path = "../crates/syscall_consts" }
 xmas-elf = "0.9.0"
+log = "0.4"
+
+[dependencies.virtio-drivers]
+git = "https://github.com/rcore-os/virtio-drivers.git"
+rev = "3a9a69c"
 
 [workspace]
 members = ["apps/vm"]

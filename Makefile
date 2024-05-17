@@ -64,6 +64,9 @@ endif
 all: build
 
 fs-img:
+	rm -f $(FS_IMG)
+	dd if=/dev/zero of=$(FS_IMG) bs=1M count=128
+	sync
 
 env:
 	rustup component add llvm-tools-preview
@@ -85,6 +88,10 @@ run-user: fs-img user
 justrun: fs-img
 	rust-objcopy --binary-architecture=$(ARCH) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 	$(QEMU_EXEC)
+
+fdt:
+	$(QEMU_EXEC) -machine virt,dumpdtb=virt.out
+	fdtdump virt.out
 
 debug: fs-img build
 	@tmux new-session -d \

@@ -54,6 +54,8 @@ pub enum SysCall {
     HinaVM = 16,
     /// 关闭系统
     Shutdown = 17,
+    /// 翻译虚拟页表
+    TransVAddr = 18,
 }
 
 /// 系统调用的错误
@@ -305,6 +307,39 @@ pub enum MessageContent {
     },
     /// 服务注册消息回复，携带任务 id
     ServiceLookupReplyMsg(usize),
+    /// 申请内存
+    VmAllocPhysicalMsg {
+        size: usize,
+    },
+    /// 申请内存回复
+    VmAllocPhysicalReplyMsg {
+        uaddr: usize,
+        paddr: usize,
+    },
+    /// 映射物理内存消息
+    VmMapPhysicalMsg {
+        paddr: usize,
+        size: usize,
+        map_flags: usize,
+    },
+    /// 取消映射物理内存消息
+    VmMapPhysicalReplyMsg {
+        uaddr: usize,
+    },
+    /// 读取块消息
+    ReadBlockMsg {
+        block_index: usize,
+        buffer: [u8; 0x200],
+    },
+    /// 读取块回复消息
+    ReadBlockReplyMsg(usize),
+    /// 写块消息
+    WriteBlockMsg {
+        block_index: usize,
+        buffer: [u8; 0x200],
+    },
+    /// 写块回复消息
+    BlkWriteReplyMsg(usize),
     None,
 }
 
