@@ -4,7 +4,7 @@ use spin::Mutex;
 use syscall_consts::{
     IPCFlags, Message, MessageContent, Notify,
     NotifyEnum::{self, IRQ, TIMER},
-    SysCall, IPC_ANY,
+    SysCall, IPC_ANY, NAME_LEN, VM_SERVER,
 };
 
 use crate::println;
@@ -150,6 +150,12 @@ pub fn sys_ipc(dst: usize, src: usize, message: &mut Message, flags: IPCFlags) -
     )
 }
 
+/// 发送并接收 IPC
+#[inline]
+pub fn ipc_call(dst: usize, message: &mut Message) -> isize {
+    sys_ipc(dst, dst, message, IPCFlags::CALL)
+}
+
 /// 发送 ipc 请求
 #[inline]
 pub fn ipc_send_noblock(dst: usize, message: &mut Message) -> isize {
@@ -253,4 +259,46 @@ pub fn sys_vm_map(tid: usize, uaddr: usize, paddr: usize, attrs: usize) -> isize
 #[inline]
 pub fn sys_vm_unmap(tid: usize, uaddr: usize) -> isize {
     syscall(SysCall::VMUnmap.into(), [tid, uaddr, 0, 0])
+}
+
+/// 注册服务
+pub fn ipc_register(name: &str) -> isize {
+    let bytes = name.as_bytes();
+    assert!(bytes.len() < NAME_LEN, "Service name too long");
+    let mut message = Message::blank();
+    // 复制 name 到 buffer 中，以便于进行 IPC
+    let mut name_buffer = [0; NAME_LEN];
+
+    name_buffer[..bytes.len()].copy_from_slice(&bytes[..bytes.len()]);
+    name_buffer[bytes.len()..].fill(0);
+
+    message.content = MessageContent::ServiceRegisterMsg { name_buffer };
+
+    ipc_call(VM_SERVER, &mut message)
+}
+
+/// 搜索服务对应的 taskid
+pub fn service_lookup(name: &str) -> Option<usize> {
+    let bytes = name.as_bytes();
+    assert!(bytes.len() < NAME_LEN, "Service name too long");
+    let mut message = Message::blank();
+    // 复制 name 到 buffer 中，以便于进行 IPC
+    let mut name_buffer = [0; NAME_LEN];
+
+    name_buffer[..bytes.len()].copy_from_slice(&bytes[..bytes.len()]);
+    name_buffer[bytes.len()..].fill(0);
+
+    message.content = MessageContent::ServiceLookupMsg { name_buffer };
+
+    let ret = ipc_call(VM_SERVER, &mut message);
+    match ret >= 0 {
+        true => {
+            if let MessageContent::ServiceLookupReplyMsg(reply) = message.content {
+                Some(reply)
+            } else {
+                None
+            }
+        }
+        false => None,
+    }
 }

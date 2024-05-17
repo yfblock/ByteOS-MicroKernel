@@ -82,6 +82,7 @@ impl MicroKernelTask {
         message: &mut Message,
         flags: IPCFlags,
     ) -> SysResult {
+        log::trace!("task {} send {:?} to {}", self.tid, message, dst);
         // 不能给自己发送 IPC
         if dst == self.tid {
             return Err(SysCallError::InvalidArg);
@@ -116,13 +117,16 @@ impl MicroKernelTask {
                 .find(|x| **x == dst.tid)
                 .is_some()
             {
+                log::error!("deadlock");
                 return Err(SysCallError::DeadLock);
             }
 
             // 将当前任务添加到目的任务的等待列表
             dst.senders.lock().push(self.tid);
+
             // 阻塞当前任务
             self.block();
+
             // 等待当前任务恢复
             WaitResume(self).await;
 
@@ -144,7 +148,7 @@ impl MicroKernelTask {
         };
         *dst.message.lock() = Some(Message {
             source,
-            content: message.content,
+            content: message.content.clone(),
         });
         // 恢复 dst 任务运行
         dst.resume();
@@ -187,10 +191,13 @@ impl MicroKernelTask {
                 .downcast_arc::<MicroKernelTask>()
                 .map_err(|_| SysCallError::InvalidArg)?
                 .resume();
+            // 删除 senders 中的目标任务
+            self.senders.lock().retain(|x| *x != target_tid);
         }
 
-        // 等待来自 src 任务的 IPC
-        *self.wait_for.lock() = Some(src);
+        // TIPS: 如果是唤醒了 target_tid 的任务，那么只等待它, 因为那里已经在阻塞了
+        // 否则可能出现消息丢失
+        *self.wait_for.lock() = Some(target_tid.unwrap_or(src));
 
         // 阻塞当前任务
         self.block();
@@ -200,7 +207,7 @@ impl MicroKernelTask {
         *self.wait_for.lock() = None;
 
         // 复制消息
-        *message = self.message.lock().unwrap();
+        *message = self.message.lock().clone().unwrap();
         Ok(0)
     }
 
@@ -235,7 +242,10 @@ impl MicroKernelTask {
     ) -> SysResult {
         log::trace!("ipc: {:?}, {:?}, {:?}, {:?}", dst, src, buffer, flags);
         let flags = IPCFlags::from_bits(flags).ok_or(SysCallError::InvalidArg)?;
-        info!("ipc dst: {} src: {} flags: {:?}", dst, src, flags);
+        info!(
+            "[task {}] ipc dst: {} src: {} flags: {:?}",
+            self.tid, dst, src, flags
+        );
         if flags.contains(IPCFlags::KERNEL) {
             return Err(SysCallError::InvalidArg);
         }
@@ -251,19 +261,20 @@ impl MicroKernelTask {
     /// 创建新的任务
     pub async fn sys_task_create(
         &self,
-        name_buf: UserBuffer<i8>,
+        name_buf: UserBuffer<u8>,
         entry_point: usize,
         pager: usize,
     ) -> SysResult {
-        let name = name_buf
-            .get_str(self)
-            .await
-            .ok_or(SysCallError::InvalidArg)?;
+        let name = name_buf.get_str(self).await.map_err(|err| {
+            log::error!("{:#x?}", err);
+            SysCallError::InvalidArg
+        })?;
+
         let pager = tid2task(pager)
             .map(|x| x.downcast_arc::<MicroKernelTask>().ok())
             .flatten();
 
-        Ok(Self::new(name, entry_point, pager))
+        Ok(Self::new(&name, entry_point, pager))
     }
 
     /// 申请物理内存
@@ -323,7 +334,7 @@ impl MicroKernelTask {
 
     /// 处理系统调用
     pub async fn syscall(&self, id: usize, args: [usize; 6]) -> Result<usize, SysCallError> {
-        info!("syscall: {:?}", SysCall::try_from(id));
+        info!("task: {} syscall: {:?}", self.tid, SysCall::try_from(id));
         match SysCall::try_from(id).map_err(|_| SysCallError::InvalidSyscall)? {
             // IPC 请求
             SysCall::IPC => {

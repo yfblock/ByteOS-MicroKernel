@@ -3,8 +3,10 @@
 #![feature(exclusive_range_pattern)]
 
 use alloc::{string::String, vec::Vec};
-use syscall_consts::{Message, IPC_ANY};
-use users::syscall::{ipc_recv, serial_read, serial_write, sys_time, sys_uptime, task_self};
+use syscall_consts::{Message, MessageContent, IPC_ANY};
+use users::syscall::{
+    ipc_call, ipc_recv, serial_read, serial_write, service_lookup, sys_time, sys_uptime, task_self,
+};
 
 #[macro_use]
 extern crate users;
@@ -76,6 +78,16 @@ fn main() {
         // 读取一行输入
         let line = read_line();
 
-        println!("{}", line);
+        match line.as_str() {
+            "ping" => {
+                if let Some(task_pong_id) = service_lookup("pong") {
+                    message.content = MessageContent::PingMsg(321);
+                    println!("Send ping message {} to vm server", 321);
+                    ipc_call(task_pong_id, &mut message);
+                    println!("Ping message reply {:?}", message.content);
+                }
+            }
+            _ => {}
+        }
     }
 }

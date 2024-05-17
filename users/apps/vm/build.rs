@@ -8,5 +8,6 @@ macro_rules! display {
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=target/riscv64gc-unknown-none-elf/release/vm");
+    println!("cargo:rerun-if-changed=target/riscv64gc-unknown-none-elf/release/shell");
+    println!("cargo:rerun-if-changed=target/riscv64gc-unknown-none-elf/release/pong");
 }

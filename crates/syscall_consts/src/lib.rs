@@ -1,6 +1,8 @@
 #![no_std]
 #![feature(decl_macro)]
 
+extern crate alloc;
+
 use core::{
     mem::size_of,
     ops::{BitOr, BitOrAssign},
@@ -260,22 +262,49 @@ pub const IPC_ANY: usize = 0;
 /// 一般用在 [Message::source] 表示从内核发送的任务
 pub const FROM_KERNEL: usize = usize::MAX;
 
+/// 指 ROOT SERVER
+pub const VM_SERVER: usize = 1;
+
+/// 存储 Service Name 的字符串长度
+pub const NAME_LEN: usize = 64;
+
 /// 消息内容，这是一个 Rust 的 enum 结构
 /// 后续可以在这个里面添加消息结构以增加消息的类型。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MessageContent {
+    /// 页错误消息
     PageFault {
         tid: usize,
         uaddr: usize,
         ip: usize,
         fault: PageFaultReason,
     },
+    /// 页错误回复消息
     PageFaultReply,
+    /// 通知消息
     NotifyField {
         notications: Notify,
     },
+    /// Ping
+    PingMsg(usize),
+    /// pong
+    PingReplyMsg(usize),
+    /// 中断
     NotifyIRQ,
+    /// 定时器
     NotifyTimer,
+    /// 服务注册消息
+    ServiceRegisterMsg {
+        name_buffer: [u8; NAME_LEN],
+    },
+    /// 服务注册消息回复
+    ServiceRegisterReplyMsg,
+    /// 服务注册消息
+    ServiceLookupMsg {
+        name_buffer: [u8; NAME_LEN],
+    },
+    /// 服务注册消息回复，携带任务 id
+    ServiceLookupReplyMsg(usize),
     None,
 }
 
@@ -283,7 +312,7 @@ pub enum MessageContent {
 /// `src` 是从哪个任务传递过来的消息
 /// `content` 是消息的内容，这是一个 enum 结构
 /// 由于 kernel 和 user app 都是 Rust，所以可以采用 Rust 的 enum
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Message {
     pub source: usize,
     pub content: MessageContent,

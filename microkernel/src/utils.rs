@@ -1,5 +1,6 @@
-use core::{ffi::CStr, marker::PhantomData};
+use core::{marker::PhantomData, str::Utf8Error};
 
+use alloc::string::{String, ToString};
 use polyhal::{
     addr::VirtAddr,
     pagetable::{MappingFlags, PageTable},
@@ -46,6 +47,7 @@ pub async fn handle_page_fault(vaddr: VirtAddr, task: &MicroKernelTask) {
     }
 }
 
+// TODO: Check object cross more pages.
 #[allow(dead_code)]
 impl<T> UserBuffer<T> {
     #[inline]
@@ -71,10 +73,26 @@ impl<T> UserBuffer<T> {
     }
 }
 
-impl UserBuffer<i8> {
-    pub async fn get_str(&self, task: &MicroKernelTask) -> Option<&str> {
+impl UserBuffer<u8> {
+    #[inline]
+    pub async fn slice_with_until_valid(&self, task: &MicroKernelTask) -> &'static [u8] {
         handle_page_fault(self.addr, task).await;
-        unsafe { CStr::from_ptr(self.addr.get_ref()).to_str().ok() }
+        let mut len = 0;
+        let ptr = self.addr.addr() as *const u8;
+        unsafe {
+            loop {
+                if *ptr.add(len) == 0 {
+                    break;
+                }
+                len += 1;
+            }
+            core::slice::from_raw_parts(ptr, len)
+        }
+    }
+
+    pub async fn get_str(&self, task: &MicroKernelTask) -> Result<String, Utf8Error> {
+        handle_page_fault(self.addr, task).await;
+        Ok(String::from_utf8_lossy(self.slice_with_until_valid(task).await).to_string())
     }
 }
 

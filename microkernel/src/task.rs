@@ -184,9 +184,13 @@ pub fn add_root_server() {
             page.len() > 0,
             "can't allocate page for root server at boot stage."
         );
-        let stack_top = VirtPage::from_addr(USER_STACK_TOP_ADDR - i * PAGE_SIZE);
+
+        // 获取栈地址
+        let stack_addr = VirtPage::from_addr(USER_STACK_TOP_ADDR - i * PAGE_SIZE);
+
+        // 映射栈内存
         root_server.page_table.map_page(
-            stack_top,
+            stack_addr,
             page[0].0,
             MappingFlags::URWX,
             MappingSize::Page4KB,
@@ -242,9 +246,11 @@ impl MicroKernelTask {
                 page.len() > 0,
                 "can't allocate page for root server at boot stage."
             );
-            let stack_top = VirtPage::from_addr(USER_STACK_TOP_ADDR - i * PAGE_SIZE);
+            // 获取栈地址
+            let stack_addr = VirtPage::from_addr(USER_STACK_TOP_ADDR - i * PAGE_SIZE);
+            // 映射栈内存
             new_task.page_table.map_page(
-                stack_top,
+                stack_addr,
                 page[0].0,
                 MappingFlags::URWX,
                 MappingSize::Page4KB,
@@ -286,7 +292,7 @@ impl MicroKernelTask {
             }
             // 获取当前 pager
             if self.pager.is_none() {
-                panic!("unexpected page fault in user, it don't have a pager {vaddr} @ {sepc}");
+                panic!("unexpected page fault in user task {}, it don't have a pager {vaddr:#x} @ {sepc:#x}", self.tid);
             }
             let pager = self.pager.clone().unwrap();
             // 设置 message
@@ -373,7 +379,7 @@ impl MicroKernelTask {
             }
             self.handle_page_fault().await;
         }
-        info!("task {} exited successfully", self.get_task_id());
+        log::trace!("task {} exited successfully", self.get_task_id());
     }
 
     /// 检查当前任务的 timeout, 一般会在 Block 状态下做

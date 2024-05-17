@@ -34,6 +34,10 @@ global_asm!(
         bin_shell_start:
         .incbin "target/riscv64gc-unknown-none-elf/release/shell"
         bin_shell_end:
+
+        bin_pong_start:
+        .incbin "target/riscv64gc-unknown-none-elf/release/pong"
+        bin_pong_end:
     "#,
 );
 
@@ -61,8 +65,11 @@ static SERVERS_BIN: Lazy<Vec<(&str, &[u8])>> = Lazy::new(|| {
     extern "C" {
         fn bin_shell_start();
         fn bin_shell_end();
+        fn bin_pong_start();
+        fn bin_pong_end();
     }
     include_app!(container, shell);
+    include_app!(container, pong);
     container
 });
 
@@ -85,6 +92,15 @@ pub struct Task {
     pub waiting_for: String,
     /// 是否监控任务完成情况
     pub watch_tasks: bool,
+}
+
+/// 微内核服务
+#[derive(Debug, Clone)]
+pub struct Service {
+    /// 服务名称
+    pub name: String,
+    /// 服务对应的任务 ID
+    pub task_id: usize,
 }
 
 impl Task {
@@ -152,6 +168,15 @@ impl Task {
 
 /// 任务队列
 pub static TASK_LIST: Mutex<Vec<Task>> = Mutex::new(Vec::new());
+/// 服务列表
+pub static SERVICE_LIST: Mutex<Vec<Service>> = Mutex::new(Vec::new());
+
+/// 注册一个服务
+pub fn register_service(tid: usize, name: String) {
+    // 将服务加入到服务列表中
+    SERVICE_LIST.lock().push(Service { name, task_id: tid });
+    // TODO: 如果有服务正在等待该服务，那么恢复其任务
+}
 
 /// 启动 servers
 pub fn spawn_servers() {
@@ -161,6 +186,10 @@ pub fn spawn_servers() {
         let new_tid = sys_task_create(name, elf_file.header.pt2.entry_point() as _, task_self());
         // 如果 tid < 0，那么说明这个 task 没有启动起来
         if new_tid < 0 {
+            println!(
+                "task creation failed because: {:?}",
+                UserError::try_from(new_tid)
+            );
             return;
         }
         println!("spawn task {} id {}", name, new_tid);
