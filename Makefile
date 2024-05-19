@@ -13,7 +13,6 @@ SMP := 1
 QEMU_EXEC ?= 
 GDB  ?= gdb-multiarch
 ARCH := $(call byteos_triple,arch)
-ROOT_FS := $(call byteos_config,root_fs)
 TARGET := $(call byteos_meta,target)
 
 BUS  := device
@@ -65,8 +64,13 @@ all: build
 
 fs-img:
 	rm -f $(FS_IMG)
-	dd if=/dev/zero of=$(FS_IMG) bs=1M count=128
+	dd if=/dev/zero of=$(FS_IMG) bs=1M count=40
+	mkfs.vfat -F 32 $(FS_IMG)
 	sync
+	sudo mount $(FS_IMG) mount -o uid=1000,gid=1000
+	touch mount/file123
+	mkdir mount/dir123
+	sudo umount mount
 
 env:
 	rustup component add llvm-tools-preview
@@ -75,17 +79,17 @@ build:
 	kbuild build microkernel.yaml $(BIN)
 	rust-objcopy --binary-architecture=$(ARCH) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 
-run: fs-img build
+run: build
 	time $(QEMU_EXEC)
 
 user:
 	cd users && make
 
-run-user: fs-img user 
+run-user: user 
 	make build
 	time $(QEMU_EXEC)
 
-justrun: fs-img
+justrun: 
 	rust-objcopy --binary-architecture=$(ARCH) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 	$(QEMU_EXEC)
 
@@ -93,7 +97,7 @@ fdt:
 	$(QEMU_EXEC) -machine virt,dumpdtb=virt.out
 	fdtdump virt.out
 
-debug: fs-img build
+debug: build
 	@tmux new-session -d \
 	"$(QEMU_EXEC) -s -S && echo '按任意键继续' && read -n 1" && \
 	tmux split-window -h "$(GDB) $(KERNEL_ELF) -ex 'target remote localhost:1234' -ex 'disp /16i $pc' " && \

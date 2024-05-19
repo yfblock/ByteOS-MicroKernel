@@ -9,8 +9,8 @@ use core::ptr::NonNull;
 use spin::{Lazy, Mutex};
 use syscall_consts::{Message, MessageContent, IPC_ANY};
 use users::{
-    syscall::{ipc_recv, ipc_register, map_paddr},
-    PAGE_SIZE,
+    syscall::{ipc_recv, map_paddr},
+    BLOCK_SIZE, PAGE_SIZE,
 };
 use virtio_drivers::{device::blk::VirtIOBlk, transport::mmio::MmioTransport};
 use virtio_impl::HalImpl;
@@ -47,10 +47,11 @@ pub fn init_virtio_blk() {
         "virtio block capacity: {:#x} MB",
         BLK_DEVICE.lock().capacity() / 256
     );
-    let buffer = HalImpl::write_buffer();
+    // let buffer = HalImpl::write_buffer();
+    let mut buffer = [0u8; BLOCK_SIZE];
     BLK_DEVICE
         .lock()
-        .read_blocks(0, buffer)
+        .read_blocks(0, &mut buffer)
         .expect("can't read block");
     // BLK_DEVICE.lock().write_blocks(0, buffer).expect("can't write block");
 }
@@ -97,10 +98,11 @@ fn main() {
     init(Some("debug"));
     let mut message = Message::blank();
 
-    init_virtio_blk();
+    // TODO: Fix virtio block
+    // init_virtio_blk();
 
     println!("register blk_device service!");
-    ipc_register("blk_device");
+    // ipc_register("blk_device");
 
     loop {
         ipc_recv(IPC_ANY, &mut message);

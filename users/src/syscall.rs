@@ -1,5 +1,9 @@
 use core::{arch::asm, panic};
 
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use spin::Mutex;
 use syscall_consts::{
     IPCFlags, Message, MessageContent, Notify,
@@ -349,6 +353,101 @@ pub fn map_paddr(paddr: usize, size: usize) -> Option<usize> {
         }
         false => None,
     }
+}
+
+/// 获取块设备大小, 返回值为块的数量
+pub fn get_block_capacity(task_id: usize) -> Option<usize> {
+    let mut message = Message::blank();
+
+    // 设置需要映射的物理地址和 size
+    message.content = MessageContent::GetBlockCapacity;
+
+    let ret = ipc_call(task_id, &mut message);
+    // 判断是否映射成功
+    match ret >= 0 {
+        true => {
+            // 判断返回的消息是否正确
+            if let MessageContent::GetBlockCapacityReplyMsg(size) = message.content {
+                Some(size)
+            } else {
+                None
+            }
+        }
+        false => None,
+    }
+}
+
+/// 读取块设备，block_index 是需要读取的块设备地址，buffer 是读取后的数据存放的缓冲区
+pub fn block_read(task_id: usize, block_index: usize, buf: &mut [u8]) -> Option<()> {
+    let mut message = Message::blank();
+
+    // 设置需要读取的块索引和数据存储地址
+    message.content = MessageContent::ReadBlockMsg { block_index };
+
+    let ret = ipc_call(task_id, &mut message);
+    // 判断读取是否成功
+    match ret >= 0 {
+        true => {
+            // 判断返回的消息是否正确
+            if let MessageContent::ReadBlockReplyMsg { buffer } = message.content {
+                buf.copy_from_slice(&buffer);
+                Some(())
+            } else {
+                None
+            }
+        }
+        false => None,
+    }
+}
+
+/// 写入块设备，block_index 是需要写入的块设备地址，buufer 是需要写入的数据
+pub fn block_write(task_id: usize, block_index: usize, buf: &mut [u8]) -> Option<()> {
+    let mut message = Message::blank();
+
+    // 设置需要读取的块索引和数据存储地址
+    message.content = MessageContent::WriteBlockMsg {
+        block_index,
+        buffer: buf.try_into().unwrap(),
+    };
+
+    let ret = ipc_call(task_id, &mut message);
+    // 判断读取是否成功
+    match ret >= 0 {
+        true => {
+            // 判断返回的消息是否正确
+            if let MessageContent::WriteBlockReplyMsg = message.content {
+                Some(())
+            } else {
+                None
+            }
+        }
+        false => None,
+    }
+}
+
+/// 读取文件夹
+pub fn fs_read_dir(task_id: usize, dir: &str) -> Vec<String> {
+    let mut container = Vec::new();
+    let mut message = Message::blank();
+    let mut path_buffer = [0u8; 2 * NAME_LEN];
+    let bytes = dir.as_bytes();
+    path_buffer[..bytes.len()].copy_from_slice(bytes);
+    loop {
+        message.content = MessageContent::FSReadDirMsg {
+            path: path_buffer,
+            index: container.len(),
+        };
+        if ipc_call(task_id, &mut message) < 0 {
+            break;
+        }
+        if let MessageContent::FSReadDirReplyMsg { buffer, num } = message.content {
+            if num == 0 {
+                break;
+            }
+            container.push(String::from_utf8_lossy(&buffer).to_string());
+        }
+    }
+    container
 }
 
 /// 翻译虚拟地址

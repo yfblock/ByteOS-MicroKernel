@@ -5,7 +5,8 @@
 use alloc::{string::String, vec::Vec};
 use syscall_consts::{Message, MessageContent, IPC_ANY};
 use users::syscall::{
-    ipc_call, ipc_recv, serial_read, serial_write, service_lookup, sys_time, sys_uptime, task_self,
+    fs_read_dir, get_block_capacity, ipc_call, ipc_recv, serial_read, serial_write, service_lookup,
+    sys_time, sys_uptime, task_self,
 };
 
 #[macro_use]
@@ -35,10 +36,7 @@ fn read_line() -> String {
             match tmp[i] as u8 {
                 // 如果是换行符
                 CR | LF => {
-                    // 当前已经接收的字符数量为 0
-                    if buffer.len() != 0 {
-                        print!("\n");
-                    }
+                    print!("\n");
                     return String::from_utf8(buffer).expect("This is not a valid utf8 string");
                 }
                 // 如果是退格符
@@ -79,6 +77,8 @@ fn main() {
         let line = read_line();
 
         match line.as_str() {
+            "" => {}
+            // Ping-Pong 命令，测试 IPC 和服务
             "ping" => {
                 if let Some(task_pong_id) = service_lookup("pong") {
                     message.content = MessageContent::PingMsg(321);
@@ -87,13 +87,33 @@ fn main() {
                     println!("Ping message reply {:?}", message.content);
                 }
             }
-            "help" => {
+            // 显示所有的 block 设备，目前只有一个
+            "disks" => {
+                if let Some(blk_dev_tid) = service_lookup("blk_device") {
+                    println!(
+                        "block device capactiy {} MB",
+                        get_block_capacity(blk_dev_tid).unwrap_or(0) / 2048
+                    );
+                }
+            }
+            // 列出文件夹下所有的文件
+            "ls" => {
+                if let Some(fs_tid) = service_lookup("fs") {
+                    println!("fs tid is: {}", fs_tid);
+                    let files = fs_read_dir(fs_tid, ".");
+                    println!("files: {}", files.len());
+                    files.iter().for_each(|x| {
+                        println!("{:>4} {:<8}", "", x);
+                    });
+                }
+            }
+            // 输出帮助信息
+            "help" | _ => {
                 println!("commands available are below:");
-                ["help", "ping"].iter().for_each(|x| {
+                ["help", "ping", "disks", "ls"].iter().for_each(|x| {
                     println!("{:>10}", x);
                 });
             }
-            _ => {}
         }
     }
 }

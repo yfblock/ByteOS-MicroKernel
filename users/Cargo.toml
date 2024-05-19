@@ -10,6 +10,11 @@ syscall_consts = { path = "../crates/syscall_consts" }
 xmas-elf = "0.9.0"
 log = "0.4"
 
+[dependencies.fatfs]
+git = "https://github.com/rafalh/rust-fatfs.git"
+default-features = false
+features = ["alloc", "lfn", "unicode"]
+
 [dependencies.virtio-drivers]
 git = "https://github.com/rcore-os/virtio-drivers.git"
 rev = "3a9a69c"

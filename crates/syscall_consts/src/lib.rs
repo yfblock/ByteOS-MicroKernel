@@ -329,17 +329,34 @@ pub enum MessageContent {
     /// 读取块消息
     ReadBlockMsg {
         block_index: usize,
-        buffer: [u8; 0x200],
     },
     /// 读取块回复消息
-    ReadBlockReplyMsg(usize),
+    ReadBlockReplyMsg {
+        buffer: [u8; 0x200],
+    },
     /// 写块消息
     WriteBlockMsg {
         block_index: usize,
         buffer: [u8; 0x200],
     },
     /// 写块回复消息
-    BlkWriteReplyMsg(usize),
+    WriteBlockReplyMsg,
+    /// 获取块设备大小
+    GetBlockCapacity,
+    /// 获取块设备大小回复消息, 单位 BLOCK_SIZE
+    GetBlockCapacityReplyMsg(usize),
+    /// 读取文件目录消息
+    FSReadDirMsg {
+        path: [u8; 2 * NAME_LEN],
+        /// 已经读取的数量
+        index: usize,
+    },
+    /// 读取文件目录回复消息
+    FSReadDirReplyMsg {
+        buffer: [u8; 2 * NAME_LEN],
+        /// 本次读取成功的数量
+        num: usize,
+    },
     None,
 }
 

@@ -2,10 +2,10 @@ use core::{arch::global_asm, cmp};
 
 use alloc::{string::String, vec::Vec};
 use spin::{Lazy, Mutex};
-use syscall_consts::PageFaultReason;
+use syscall_consts::{Message, MessageContent, PageFaultReason};
 use users::{
     align_down, align_up,
-    syscall::{sys_pm_alloc, sys_task_create, sys_vm_map, sys_vm_unmap, task_self},
+    syscall::{ipc_reply, sys_pm_alloc, sys_task_create, sys_vm_map, sys_vm_unmap, task_self},
     UserError, PAGE_SIZE,
 };
 use xmas_elf::{program::Type, ElfFile};
@@ -43,6 +43,10 @@ global_asm!(
         .incbin "target/riscv64gc-unknown-none-elf/release/blk_device"
         bin_blk_device_end:
 
+        bin_ram_disk_start:
+        .incbin "target/riscv64gc-unknown-none-elf/release/ram_disk"
+        bin_ram_disk_end:
+
         bin_fs_start:
         .incbin "target/riscv64gc-unknown-none-elf/release/fs"
         bin_fs_end:
@@ -77,12 +81,15 @@ static SERVERS_BIN: Lazy<Vec<(&str, &[u8])>> = Lazy::new(|| {
         fn bin_pong_end();
         fn bin_blk_device_start();
         fn bin_blk_device_end();
+        fn bin_ram_disk_start();
+        fn bin_ram_disk_end();
         fn bin_fs_start();
         fn bin_fs_end();
     }
     include_app!(container, shell);
     include_app!(container, pong);
     include_app!(container, blk_device);
+    include_app!(container, ram_disk);
     include_app!(container, fs);
     container
 });
@@ -197,8 +204,20 @@ pub static SERVICE_LIST: Mutex<Vec<Service>> = Mutex::new(Vec::new());
 /// 注册一个服务
 pub fn register_service(tid: usize, name: String) {
     // 将服务加入到服务列表中
-    SERVICE_LIST.lock().push(Service { name, task_id: tid });
-    // TODO: 如果有服务正在等待该服务，那么恢复其任务
+    SERVICE_LIST.lock().push(Service {
+        name: name.clone(),
+        task_id: tid,
+    });
+    // 如果有服务正在等待该服务，那么恢复其任务
+    TASK_LIST.lock().iter_mut().for_each(|x| {
+        // 如果有任务正在等待该服务，将其唤醒
+        if x.waiting_for == name {
+            x.waiting_for = String::new();
+            let mut message = Message::blank();
+            message.content = MessageContent::ServiceLookupReplyMsg(x.tid);
+            ipc_reply(message.source, &mut message);
+        }
+    });
 }
 
 /// 启动 servers
