@@ -4,7 +4,6 @@
 
 mod fatfs_shim;
 
-use alloc::string::{String, ToString};
 use syscall_consts::{Message, MessageContent, IPC_ANY, NAME_LEN};
 use users::syscall::{ipc_recv, ipc_register, ipc_reply, service_lookup};
 
@@ -59,13 +58,13 @@ fn main() {
                     ipc_reply(message.source, &mut message);
                 };
                 // TODO: use path instead of fixed root path
-                // let mut path = String::from_utf8_lossy(&path).trim().to_string();
-                // let dir = match fs.root_dir().open_dir(".") {
+                // let mut path = get_string_from_slice(&path).trim().to_string();
+                // let dir = match fs.root_dir().open_dir("/") {
                 //     Ok(dir) => dir,
                 //     Err(_) => {
                 //         reply(None);
                 //         continue;
-                //     },
+                //     }
                 // };
                 // 遍历文件夹
                 let dir = fs.root_dir();

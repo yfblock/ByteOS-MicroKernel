@@ -107,6 +107,5 @@ fn main(hart_id: usize) {
         if *FINISHED_CORES.lock() == get_cpu_num() {
             break;
         }
-        polyhal::wfi();
     }
 }

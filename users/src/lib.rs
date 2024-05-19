@@ -7,6 +7,7 @@ extern crate alloc;
 mod console;
 pub mod syscall;
 
+use alloc::string::{String, ToString};
 use buddy_system_allocator::LockedHeap;
 pub use console::print;
 use syscall_consts::SysCallError;
@@ -76,6 +77,15 @@ fn panic(info: &PanicInfo) -> ! {
     println!("\x1b[1;31mpanic: '{}'\x1b[0m", info.message().unwrap());
     // 退出当前任务
     exit();
+}
+
+/// 从 slice 切片中匹配字符串
+pub fn get_string_from_slice(buffer: &[u8]) -> String {
+    let len = buffer
+        .iter()
+        .position(|&x| x == b'\0')
+        .unwrap_or(buffer.len());
+    String::from_utf8_lossy(&buffer[..len]).to_string()
 }
 
 #[allow(dead_code)]

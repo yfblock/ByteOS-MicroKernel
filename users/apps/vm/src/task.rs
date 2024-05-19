@@ -26,6 +26,7 @@ macro_rules! include_app {
 }
 
 // 引入 elf 文件并且设置对齐
+#[cfg(target_arch = "riscv64")]
 global_asm!(
     r#"
         .p2align 12
@@ -49,6 +50,90 @@ global_asm!(
 
         bin_fs_start:
         .incbin "target/riscv64gc-unknown-none-elf/release/fs"
+        bin_fs_end:
+    "#,
+);
+
+#[cfg(target_arch = "aarch64")]
+global_asm!(
+    r#"
+        .p2align 12
+        .global bin_shell_start
+        .global bin_shell_end
+        bin_shell_start:
+        .incbin "target/aarch64-unknown-none-softfloat/release/shell"
+        bin_shell_end:
+
+        bin_pong_start:
+        .incbin "target/aarch64-unknown-none-softfloat/release/pong"
+        bin_pong_end:
+
+        bin_blk_device_start:
+        .incbin "target/aarch64-unknown-none-softfloat/release/blk_device"
+        bin_blk_device_end:
+
+        bin_ram_disk_start:
+        .incbin "target/aarch64-unknown-none-softfloat/release/ram_disk"
+        bin_ram_disk_end:
+
+        bin_fs_start:
+        .incbin "target/aarch64-unknown-none-softfloat/release/fs"
+        bin_fs_end:
+    "#,
+);
+
+#[cfg(target_arch = "x86_64")]
+global_asm!(
+    r#"
+        .p2align 12
+        .global bin_shell_start
+        .global bin_shell_end
+        bin_shell_start:
+        .incbin "target/x86_64-unknown-none/release/shell"
+        bin_shell_end:
+
+        bin_pong_start:
+        .incbin "target/x86_64-unknown-none/release/pong"
+        bin_pong_end:
+
+        bin_blk_device_start:
+        .incbin "target/x86_64-unknown-none/release/blk_device"
+        bin_blk_device_end:
+
+        bin_ram_disk_start:
+        .incbin "target/x86_64-unknown-none/release/ram_disk"
+        bin_ram_disk_end:
+
+        bin_fs_start:
+        .incbin "target/x86_64-unknown-none/release/fs"
+        bin_fs_end:
+    "#,
+);
+
+#[cfg(target_arch = "loongarch64")]
+global_asm!(
+    r#"
+        .p2align 12
+        .global bin_shell_start
+        .global bin_shell_end
+        bin_shell_start:
+        .incbin "target/loongarch64-unknown-none/release/shell"
+        bin_shell_end:
+
+        bin_pong_start:
+        .incbin "target/loongarch64-unknown-none/release/pong"
+        bin_pong_end:
+
+        bin_blk_device_start:
+        .incbin "target/loongarch64-unknown-none/release/blk_device"
+        bin_blk_device_end:
+
+        bin_ram_disk_start:
+        .incbin "target/loongarch64-unknown-none/release/ram_disk"
+        bin_ram_disk_end:
+
+        bin_fs_start:
+        .incbin "target/loongarch64-unknown-none/release/fs"
         bin_fs_end:
     "#,
 );
@@ -138,10 +223,11 @@ impl Task {
             return Err(UserError::NotAllowed);
         }
 
+        // FIXME: x86_64 will have present flags, need to fix
         // 如果页已经被映射了，那么可能是权限错误，当前程序无法处理
-        if fault.contains(PageFaultReason::PRESENT) {
-            return Err(UserError::NotAllowed);
-        }
+        // if fault.contains(PageFaultReason::PRESENT) {
+        //     return Err(UserError::NotAllowed);
+        // }
 
         let paddr = sys_pm_alloc(self.tid, PAGE_SIZE, 0) as usize;
         let vaddr = align_down(uaddr, PAGE_SIZE);

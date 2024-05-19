@@ -8,3 +8,13 @@ global:
 bin:
   riscv64-qemu:
     target: "riscv64gc-unknown-none-elf"
+
+  aarch64-qemu:
+    target: "aarch64-unknown-none-softfloat"
+
+  x86_64-qemu:
+    target: "x86_64-unknown-none"
+
+  loongarch64-qemu:
+    target: "loongarch64-unknown-none"
+    build_std: "core,alloc"

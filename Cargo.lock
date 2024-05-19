@@ -258,7 +258,7 @@ dependencies = [
 [[package]]
 name = "polyhal"
 version = "0.1.0"
-source = "git+https://github.com/Byte-OS/polyhal.git#271f3365fac45f723f5099d0af150a4c3525db52"
+source = "git+https://github.com/Byte-OS/polyhal.git#3ad67de845741c1ecdeb68dbd91cdc1d3af4420c"
 dependencies = [
  "aarch64-cpu",
  "arm_gic",
@@ -285,7 +285,7 @@ dependencies = [
 [[package]]
 name = "polyhal-macro"
 version = "0.1.0"
-source = "git+https://github.com/Byte-OS/polyhal.git#271f3365fac45f723f5099d0af150a4c3525db52"
+source = "git+https://github.com/Byte-OS/polyhal.git#3ad67de845741c1ecdeb68dbd91cdc1d3af4420c"
 dependencies = [
  "proc-macro2",
  "quote",

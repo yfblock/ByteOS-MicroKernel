@@ -83,7 +83,7 @@ run: build
 	time $(QEMU_EXEC)
 
 user:
-	cd users && make
+	cd users && make TARGET=$(TARGET)
 
 run-user: user 
 	make build
@@ -104,7 +104,7 @@ debug: build
 	tmux -2 attach-session -d
 
 clean:
-	rm -rf target/
+	rm -rf target/ users/target
 
 addr2line:
 	addr2line -sfipe $(KERNEL_ELF) | rustfilt

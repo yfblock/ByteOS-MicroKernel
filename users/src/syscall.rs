@@ -1,9 +1,6 @@
 use core::{arch::asm, panic};
 
-use alloc::{
-    string::{String, ToString},
-    vec::Vec,
-};
+use alloc::{string::String, vec::Vec};
 use spin::Mutex;
 use syscall_consts::{
     IPCFlags, Message, MessageContent, Notify,
@@ -11,7 +8,7 @@ use syscall_consts::{
     SysCall, IPC_ANY, NAME_LEN, VM_SERVER,
 };
 
-use crate::println;
+use crate::{get_string_from_slice, println};
 
 /// riscv64 发送 syscall
 #[cfg(target_arch = "riscv64")]
@@ -34,7 +31,7 @@ fn syscall(id: usize, args: [usize; 4]) -> isize {
 /// aarch64 发送 syscall
 #[cfg(target_arch = "aarch64")]
 #[inline]
-fn syscall(id: usize, args: [usize; 3]) -> isize {
+fn syscall(id: usize, args: [usize; 4]) -> isize {
     let mut ret: isize;
     unsafe {
         asm!(
@@ -42,6 +39,7 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
             inlateout("x0") args[0] => ret,
             in("x1") args[1],
             in("x2") args[2],
+            in("x3") args[3],
             in("x8") id
         );
     }
@@ -51,7 +49,7 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
 /// x86_64 发送 syscall
 #[cfg(target_arch = "x86_64")]
 #[inline]
-fn syscall(id: usize, args: [usize; 3]) -> isize {
+fn syscall(id: usize, args: [usize; 4]) -> isize {
     let mut ret: isize;
     unsafe {
         asm!(
@@ -65,6 +63,7 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
             in("rdi") args[0],
             in("rsi") args[1],
             in("rdx") args[2],
+            in("r10") args[3],
             inlateout("rax") id => ret
         );
     }
@@ -74,7 +73,7 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
 /// loongarch64 发送 syscall
 #[cfg(target_arch = "loongarch64")]
 #[inline]
-fn syscall(id: usize, args: [usize; 3]) -> isize {
+fn syscall(id: usize, args: [usize; 4]) -> isize {
     let mut ret: isize;
     unsafe {
         asm!(
@@ -82,6 +81,7 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
             inlateout("$r4") args[0] => ret,
             in("$r5") args[1],
             in("$r6") args[2],
+            in("$r7") args[3],
             in("$r11") id
         );
     }
@@ -444,7 +444,7 @@ pub fn fs_read_dir(task_id: usize, dir: &str) -> Vec<String> {
             if num == 0 {
                 break;
             }
-            container.push(String::from_utf8_lossy(&buffer).to_string());
+            container.push(get_string_from_slice(&buffer));
         }
     }
     container

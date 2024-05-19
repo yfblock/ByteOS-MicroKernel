@@ -42,8 +42,14 @@ cargo install kbuild
 ```shell
 # 第一步 制作镜像
 make fs-img
-# 第二步 运行
-make LOG=error run-user
+# 第二步 运行 riscv64 版本
+make BIN=riscv64-qemu LOG=error run-user
+# 运行 aarch64 版本
+make BIN=aarch64-qemu LOG=error run-user
+# 运行 x86_64 版本
+make BIN=x86_64-qemu LOG=error run-user
+# 运行 loongarch64 版本
+make BIN=loongarch64-qemu LOG=error run-user
 ```
 
 然后使用 `help` 就可以看到可以执行的命令。

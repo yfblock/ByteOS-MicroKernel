@@ -27,11 +27,43 @@ use crate::{
 
 // 包含 vm elf 文件，vm server 将作为 root server 运行。
 // static ROOT_SERVER_BIN: &'static [u8] = include_bytes!("../../users/target/riscv64gc-unknown-none-elf/release/vm");
+
+#[cfg(target_arch = "riscv64")]
 global_asm!(
     r#"
     .p2align 12
     ROOT_SERVER_BIN:
     .incbin "users/target/riscv64gc-unknown-none-elf/release/vm"
+    ROOT_SERVER_END:
+"#
+);
+
+#[cfg(target_arch = "aarch64")]
+global_asm!(
+    r#"
+    .p2align 12
+    ROOT_SERVER_BIN:
+    .incbin "users/target/aarch64-unknown-none-softfloat/release/vm"
+    ROOT_SERVER_END:
+"#
+);
+
+#[cfg(target_arch = "x86_64")]
+global_asm!(
+    r#"
+    .p2align 12
+    ROOT_SERVER_BIN:
+    .incbin "users/target/x86_64-unknown-none/release/vm"
+    ROOT_SERVER_END:
+"#
+);
+
+#[cfg(target_arch = "loongarch64")]
+global_asm!(
+    r#"
+    .p2align 12
+    ROOT_SERVER_BIN:
+    .incbin "users/target/loongarch64-unknown-none/release/vm"
     ROOT_SERVER_END:
 "#
 );

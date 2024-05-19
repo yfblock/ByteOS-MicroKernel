@@ -2,3 +2,18 @@
 rustflags = [
     "-Clink-args=-Tlinker/linker-riscv64.ld", "-Cforce-frame-pointers=yes"
 ]
+
+[target.aarch64-unknown-none-softfloat]
+rustflags = [
+    "-Clink-args=-Tlinker/linker-aarch64.ld", "-Cforce-frame-pointers=yes"
+]
+
+[target.x86_64-unknown-none]
+rustflags = [
+    "-Clink-args=-Tlinker/linker-x86_64.ld", "-Cforce-frame-pointers=yes", "-Clink-arg=-no-pie"
+]
+
+[target.loongarch64-unknown-none]
+rustflags = [
+    "-Clink-args=-Tlinker/linker-loongarch64.ld", "-Cforce-frame-pointers=yes"
+]
