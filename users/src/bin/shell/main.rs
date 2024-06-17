@@ -5,8 +5,7 @@
 use alloc::{string::String, vec::Vec};
 use syscall_consts::{Message, MessageContent, IPC_ANY};
 use users::syscall::{
-    fs_read_dir, get_block_capacity, ipc_call, ipc_recv, serial_read, serial_write, service_lookup,
-    sys_time, sys_uptime, task_self,
+    fs_read_dir, get_block_capacity, ipc_call, ipc_recv, serial_read, serial_write, service_lookup, shutdown, sys_time, sys_uptime, task_self
 };
 
 #[macro_use]
@@ -107,10 +106,14 @@ fn main() {
                     });
                 }
             }
+            // 关机
+            "exit" => {
+                shutdown();
+            }
             // 输出帮助信息
             "help" | _ => {
                 println!("commands available are below:");
-                ["help", "ping", "disks", "ls"].iter().for_each(|x| {
+                ["help", "ping", "disks", "ls", "exit"].iter().for_each(|x| {
                     println!("{:>10}", x);
                 });
             }
